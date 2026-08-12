@@ -120,6 +120,7 @@ function buildLine(random: () => number, product: Product): OrderLine {
     name: product.name,
     band: product.band,
     art: product.art,
+    photo: product.photos[0],
     size: pick(random, sizes.length ? sizes : (['G'] as Size[])),
     quantity: random() > 0.82 ? 2 : 1,
     unitPrice: product.price,

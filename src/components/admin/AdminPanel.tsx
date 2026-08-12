@@ -7,10 +7,13 @@ import {
   Package,
   RotateCcw,
   Store,
+  TriangleAlert,
   Users,
   X,
 } from 'lucide-react';
 import { ROLE_LABEL, type Permission } from '../../types';
+import { QUOTA_EVENT, storageUsage } from '../../lib/storage';
+import { formatBytes } from '../../lib/image';
 import { useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
 import { BrandLogo } from '../art/BrandLogo';
@@ -42,6 +45,16 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
   const [tab, setTab] = useState('painel');
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [quotaFull, setQuotaFull] = useState(false);
+
+  // Sem backend as fotos ocupam o localStorage, que é pequeno. Quando o
+  // navegador recusa a gravação, o aviso precisa chegar a quem subiu a foto —
+  // senão ela some no reload e parece um bug.
+  useEffect(() => {
+    const onQuota = () => setQuotaFull(true);
+    window.addEventListener(QUOTA_EVENT, onQuota);
+    return () => window.removeEventListener(QUOTA_EVENT, onQuota);
+  }, []);
 
   // As abas visíveis dependem dos privilégios da conta logada.
   const allowed = useMemo(() => TABS.filter((item) => can(item.permission)), [can]);
@@ -163,6 +176,19 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
         </header>
 
         <main className="flex-1 p-4 md:p-8">
+          {quotaFull && (
+            <div className="mb-5 flex items-start gap-3 border border-ember/50 bg-ember/10 p-4">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-ember" />
+              <div className="text-[0.72rem] leading-relaxed text-parchment">
+                <p className="font-semibold text-bone">Armazenamento cheio.</p>
+                <p className="mt-0.5">
+                  A loja já ocupa {formatBytes(storageUsage())} e o navegador recusou
+                  a última gravação. As alterações valem só até fechar a aba. Remova
+                  fotos de algumas peças para liberar espaço.
+                </p>
+              </div>
+            </div>
+          )}
           {allowed.length === 0 ? (
             <div className="panel mx-auto mt-20 max-w-md p-8 text-center">
               <SkullMark className="mx-auto h-12 w-12 text-iron" />

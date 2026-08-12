@@ -9,7 +9,7 @@ import {
 import { formatDateTime, money, normalize, timeAgo } from '../../lib/format';
 import { useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
-import { TeeArtwork } from '../art/TeeArtwork';
+import { TeeImage } from '../art/TeeImage';
 
 const FILTERS: (OrderStatus | 'todos')[] = [
   'todos',
@@ -313,9 +313,10 @@ function OrderDetail({
               {order.lines.map((line, index) => (
                 <li key={`${line.productId}-${line.size}-${index}`} className="flex gap-3 p-3">
                   <div className="w-12 shrink-0 bg-pitch">
-                    <TeeArtwork
+                    <TeeImage
                       art={line.art}
                       band={line.band}
+                      photo={line.photo}
                       showBandName={false}
                       className="w-full"
                     />

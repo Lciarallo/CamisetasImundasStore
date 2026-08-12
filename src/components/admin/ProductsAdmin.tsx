@@ -12,7 +12,8 @@ import {
 import { money, normalize } from '../../lib/format';
 import { totalStock, useStore } from '../../store/StoreContext';
 import { SigilMark, SkullMark } from '../art/Sigils';
-import { TeeArtwork } from '../art/TeeArtwork';
+import { TeeImage } from '../art/TeeImage';
+import { PhotoUploader } from './PhotoUploader';
 
 const blankProduct = (): Product => ({
   id: `p-${Date.now().toString(36)}`,
@@ -21,6 +22,7 @@ const blankProduct = (): Product => ({
   category: 'Camiseta',
   price: 149.9,
   art: { sigil: 'pentagram', tone: 'bone', fabric: 'preto' },
+  photos: [],
   rating: 5,
   reviewsCount: 0,
   description: '',
@@ -92,9 +94,10 @@ export function ProductsAdmin() {
               className={`panel flex gap-3 p-3 ${product.active ? '' : 'opacity-50'}`}
             >
               <div className="w-16 shrink-0 bg-pitch">
-                <TeeArtwork
+                <TeeImage
                   art={product.art}
                   band={product.band}
+                  photo={product.photos[0]}
                   showBandName={false}
                   className="w-full"
                 />
@@ -244,12 +247,29 @@ function ProductEditor({
           {/* Prévia */}
           <div>
             <div className="bg-pitch p-3">
-              <TeeArtwork art={draft.art} band={draft.band || 'BANDA'} className="w-full" />
+              <TeeImage
+                art={draft.art}
+                band={draft.band || 'BANDA'}
+                photo={draft.photos[0]}
+                className="w-full"
+              />
             </div>
 
-            <div className="mt-3 space-y-3">
+            <div className="mt-4">
+              <PhotoUploader
+                photos={draft.photos}
+                onChange={(photos) => update({ photos })}
+              />
+            </div>
+
+            <div className="mt-4 space-y-3">
               <div>
-                <span className="label">Sigilo da estampa</span>
+                <span className="label">
+                  Sigilo da estampa
+                  {draft.photos.length > 0 && (
+                    <span className="ml-1 normal-case text-dust">(reserva, há foto)</span>
+                  )}
+                </span>
                 <div className="grid grid-cols-5 gap-1">
                   {SIGILS.map((sigil) => (
                     <button

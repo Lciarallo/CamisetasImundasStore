@@ -2,6 +2,42 @@ import { useCallback, useEffect, useState } from 'react';
 
 const PREFIX = 'camisetas-insanas:';
 
+/** Evento disparado quando o navegador recusa a gravação por falta de espaço. */
+export const QUOTA_EVENT = 'camisetas-insanas:quota-exceeded';
+
+/**
+ * O nome do erro varia entre navegadores, e o Firefox usa um código próprio,
+ * então checar só `name === 'QuotaExceededError'` deixaria casos passarem.
+ */
+function isQuotaError(cause: unknown): boolean {
+  if (!(cause instanceof DOMException)) return false;
+  return (
+    cause.name === 'QuotaExceededError' ||
+    cause.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    cause.code === 22 ||
+    cause.code === 1014
+  );
+}
+
+let quotaWarned = false;
+function notifyQuotaExceeded(key: string) {
+  // Um aviso por sessão: o efeito roda a cada alteração e encheria a tela.
+  if (quotaWarned) return;
+  quotaWarned = true;
+  console.warn(`[camisetas-insanas] armazenamento cheio ao gravar "${key}".`);
+  window.dispatchEvent(new CustomEvent(QUOTA_EVENT, { detail: { key } }));
+}
+
+/** Quantos bytes a loja já ocupa em localStorage. */
+export function storageUsage(): number {
+  let total = 0;
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith(PREFIX)) total += key.length + (localStorage.getItem(key)?.length ?? 0);
+  }
+  // UTF-16: cada caractere ocupa 2 bytes.
+  return total * 2;
+}
+
 /**
  * Estado persistido em localStorage. Serve de camada de dados enquanto não há
  * backend — a superfície é a mesma de um `useState`, então trocar por chamadas
@@ -26,8 +62,11 @@ export function usePersistentState<T>(
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(value));
-    } catch {
-      // Cota estourada ou modo privado — a app segue só em memória.
+    } catch (cause) {
+      // Cota estourada ou modo privado. A app segue em memória, mas falhar em
+      // silêncio seria pior que o erro: quem acabou de subir uma foto veria
+      // ela sumir no reload sem nenhuma explicação.
+      if (isQuotaError(cause)) notifyQuotaExceeded(storageKey);
     }
   }, [storageKey, value]);
 

@@ -3,7 +3,7 @@ import { Check, Hammer, Minus, Plus, Star, Truck, X } from 'lucide-react';
 import type { Product, Size } from '../../types';
 import { money } from '../../lib/format';
 import { availableFor, sizesFor } from '../../store/StoreContext';
-import { TeeArtwork } from '../art/TeeArtwork';
+import { TeeImage } from '../art/TeeImage';
 
 interface ProductModalProps {
   product: Product | null;
@@ -24,12 +24,14 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
   const [size, setSize] = useState<Size | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+  const [activePhoto, setActivePhoto] = useState(0);
 
   // Reinicia a escolha ao trocar de peça, senão o tamanho anterior vaza.
   useEffect(() => {
     setSize(null);
     setQuantity(1);
     setAdded(false);
+    setActivePhoto(0);
   }, [product?.id]);
 
   useEffect(() => {
@@ -81,7 +83,38 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
 
         <div className="grid gap-0 md:grid-cols-2">
           <div className="border-b border-smoke bg-pitch p-6 md:border-r md:border-b-0">
-            <TeeArtwork art={product.art} band={product.band} className="mx-auto w-full max-w-sm" />
+            <TeeImage
+              art={product.art}
+              band={product.band}
+              photo={product.photos[activePhoto]}
+              className="mx-auto w-full max-w-sm"
+            />
+
+            {/* Galeria — só aparece quando há mais de uma foto */}
+            {product.photos.length > 1 && (
+              <div className="mx-auto mt-4 flex max-w-sm flex-wrap gap-2">
+                {product.photos.map((photo, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setActivePhoto(index)}
+                    aria-label={`Ver foto ${index + 1} de ${product.photos.length}`}
+                    aria-current={index === activePhoto}
+                    className={`w-16 border transition-colors ${
+                      index === activePhoto
+                        ? 'border-blood'
+                        : 'border-smoke hover:border-iron'
+                    }`}
+                  >
+                    <img
+                      src={photo}
+                      alt=""
+                      loading="lazy"
+                      className="aspect-[300/340] w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-5 p-6">

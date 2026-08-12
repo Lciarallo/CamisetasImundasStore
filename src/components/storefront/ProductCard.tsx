@@ -3,7 +3,7 @@ import { Hammer, Star } from 'lucide-react';
 import type { Product, Size } from '../../types';
 import { money } from '../../lib/format';
 import { availableFor, isSoldOut, sizesFor, totalStock } from '../../store/StoreContext';
-import { TeeArtwork } from '../art/TeeArtwork';
+import { TeeImage } from '../art/TeeImage';
 
 interface ProductCardProps {
   product: Product;
@@ -20,11 +20,14 @@ export function ProductCard({ product, onOpen, onAddToCart }: ProductCardProps) 
 
   return (
     <article className="group panel relative flex flex-col transition-colors duration-300 hover:border-blood/60">
-      {/* Etiquetas */}
+      {/*
+        Etiquetas. O fundo escuro é obrigatório, não decorativo: com foto real
+        a etiqueta pode cair sobre qualquer cor, e sem ele some no claro.
+      */}
       <div className="pointer-events-none absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5">
         {product.tag && (
           <span
-            className={`tag ${
+            className={`tag bg-void/85 backdrop-blur-sm ${
               product.tag === 'Última Peça' ? 'text-blood-bright' : 'text-parchment'
             }`}
           >
@@ -39,7 +42,7 @@ export function ProductCard({ product, onOpen, onAddToCart }: ProductCardProps) 
       </div>
 
       {madeToOrder && (
-        <span className="tag absolute top-3 right-3 z-10 gap-1 text-grave">
+        <span className="tag absolute top-3 right-3 z-10 gap-1 bg-void/85 text-parchment backdrop-blur-sm">
           <Hammer className="h-2.5 w-2.5" />
           Sob encomenda
         </span>
@@ -50,9 +53,10 @@ export function ProductCard({ product, onOpen, onAddToCart }: ProductCardProps) 
         className="relative block overflow-hidden bg-pitch"
         aria-label={`Ver detalhes de ${product.name}`}
       >
-        <TeeArtwork
+        <TeeImage
           art={product.art}
           band={product.band}
+          photo={product.photos[0]}
           className="w-full transition-transform duration-500 ease-out group-hover:scale-[1.04]"
         />
         {soldOut && (

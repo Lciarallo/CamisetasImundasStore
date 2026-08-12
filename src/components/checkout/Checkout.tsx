@@ -28,7 +28,7 @@ import { INSANAS_PIX, buildPixPayload } from '../../lib/pix';
 import { useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
 import { BrandLogo } from '../art/BrandLogo';
-import { TeeArtwork } from '../art/TeeArtwork';
+import { TeeImage } from '../art/TeeImage';
 import { CardForm, EMPTY_CARD, validateCard, type CardState } from './CardForm';
 import { PIX_DISCOUNT, PixPanel } from './PixPanel';
 
@@ -191,6 +191,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
           name: product.name,
           band: product.band,
           art: product.art,
+          photo: product.photos[0],
           size: item.size,
           quantity: item.quantity,
           unitPrice: product.price,
@@ -617,9 +618,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                 return (
                   <li key={`${item.productId}-${item.size}`} className="flex gap-3 p-4">
                     <div className="w-12 shrink-0 bg-pitch">
-                      <TeeArtwork
+                      <TeeImage
                         art={product.art}
                         band={product.band}
+                        photo={product.photos[0]}
                         showBandName={false}
                         className="w-full"
                       />

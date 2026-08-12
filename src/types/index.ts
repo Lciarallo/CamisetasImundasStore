@@ -79,7 +79,16 @@ export interface Product {
   category: Category;
   price: number;
   oldPrice?: number;
+  /**
+   * Arte vetorial da peça. Continua sendo usada quando não há foto — nenhuma
+   * peça fica sem imagem no catálogo.
+   */
   art: TeeArt;
+  /**
+   * Fotos reais, já redimensionadas e comprimidas, em data URI. A primeira é a
+   * capa; as demais aparecem na galeria do modal. Vazio = usa `art`.
+   */
+  photos: string[];
   tag?: ProductTag;
   rating: number;
   reviewsCount: number;
@@ -143,6 +152,8 @@ export interface OrderLine {
   name: string;
   band: string;
   art: TeeArt;
+  /** Capa congelada no momento da compra — sobrevive à troca de foto depois. */
+  photo?: string;
   size: Size;
   quantity: number;
   unitPrice: number;

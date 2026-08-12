@@ -4,7 +4,7 @@ import { money } from '../../lib/format';
 import { useStore } from '../../store/StoreContext';
 import { FREE_SHIPPING_THRESHOLD } from '../../data/seed';
 import { SkullMark } from '../art/Sigils';
-import { TeeArtwork } from '../art/TeeArtwork';
+import { TeeImage } from '../art/TeeImage';
 
 interface CartDrawerProps {
   open: boolean;
@@ -119,9 +119,10 @@ export function CartDrawer({ open, onClose, onCheckout }: CartDrawerProps) {
                 return (
                   <li key={`${item.productId}-${item.size}`} className="flex gap-3 p-4">
                     <div className="w-16 shrink-0 bg-pitch">
-                      <TeeArtwork
+                      <TeeImage
                         art={product.art}
                         band={product.band}
+                        photo={product.photos[0]}
                         showBandName={false}
                         className="w-full"
                       />

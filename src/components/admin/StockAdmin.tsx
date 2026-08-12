@@ -4,7 +4,7 @@ import { SIZES, type Size } from '../../types';
 import { money, normalize } from '../../lib/format';
 import { totalStock, useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
-import { TeeArtwork } from '../art/TeeArtwork';
+import { TeeImage } from '../art/TeeImage';
 
 type View = 'todos' | 'pronta-entrega' | 'sob-encomenda' | 'alerta';
 
@@ -111,9 +111,10 @@ export function StockAdmin() {
               >
                 <div className="flex gap-3 sm:w-64 sm:shrink-0">
                   <div className="w-14 shrink-0 bg-pitch">
-                    <TeeArtwork
+                    <TeeImage
                       art={product.art}
                       band={product.band}
+                      photo={product.photos[0]}
                       showBandName={false}
                       className="w-full"
                     />
