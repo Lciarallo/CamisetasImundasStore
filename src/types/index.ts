@@ -37,6 +37,7 @@ export type ProductTag = 'Lançamento' | 'Clássico' | 'Última Peça' | 'Reissu
  */
 export type Sigil =
   | 'pentagram'
+  | 'heptagram'
   | 'skull'
   | 'cross'
   | 'goat'
@@ -49,6 +50,7 @@ export type Sigil =
 
 export const SIGILS: Sigil[] = [
   'pentagram',
+  'heptagram',
   'skull',
   'cross',
   'goat',

@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
+import { DoubleRing, HeptagramStar } from './art/Sigils';
 
 /**
- * Cursor temático: uma caveira que segue o ponteiro com rastro de brasas.
+ * Cursor temático: o heptagrama {7/3} dentro do círculo duplo.
+ *
+ * As duas camadas se movem separadas de propósito — a estrela cola no ponteiro
+ * e gira devagar; o círculo duplo persegue com atraso e gira ao contrário. O
+ * descompasso entre elas é o que dá peso ao movimento; se as duas colassem no
+ * ponteiro, o sigilo pareceria um adesivo.
  *
  * Só entra em ponteiro fino (mouse/trackpad). Em toque, ou quando o sistema
  * pede menos movimento, o cursor nativo permanece — cursor customizado é
  * enfeite, não pode custar usabilidade a quem depende do padrão.
  */
 export function NecroCursor() {
-  const skullRef = useRef<HTMLDivElement>(null);
+  const starRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
   const trailRef = useRef<HTMLCanvasElement>(null);
 
@@ -39,6 +45,13 @@ export function NecroCursor() {
     return () => document.documentElement.classList.remove('necro-cursor');
   }, [enabled]);
 
+  // `interactive` e `pressed` entram por ref para o laço de animação ler o
+  // valor atual sem precisar reiniciar o requestAnimationFrame a cada mudança.
+  const interactiveRef = useRef(false);
+  const pressedRef = useRef(false);
+  interactiveRef.current = interactive;
+  pressedRef.current = pressed;
+
   useEffect(() => {
     if (!enabled) return;
 
@@ -46,9 +59,10 @@ export function NecroCursor() {
     const context = canvas?.getContext('2d');
     if (!canvas || !context) return;
 
-    const pointer = { x: -100, y: -100 };
-    // O anel persegue o ponteiro com atraso — dá peso ao movimento.
-    const ring = { x: -100, y: -100 };
+    const pointer = { x: -200, y: -200 };
+    const ring = { x: -200, y: -200 };
+    let starAngle = 0;
+    let ringAngle = 0;
     const embers: { x: number; y: number; life: number; size: number; drift: number }[] = [];
 
     const resize = () => {
@@ -66,10 +80,6 @@ export function NecroCursor() {
       pointer.y = event.clientY;
       setVisible(true);
 
-      if (skullRef.current) {
-        skullRef.current.style.transform = `translate3d(${event.clientX}px, ${event.clientY}px, 0)`;
-      }
-
       // Brasas nascem no rastro, com deriva lateral aleatória.
       if (embers.length < 90) {
         embers.push({
@@ -81,7 +91,7 @@ export function NecroCursor() {
         });
       }
 
-      // Sobre qualquer coisa clicável o cursor abre e acende.
+      // Sobre qualquer coisa clicável o sigilo acende e acelera.
       const target = event.target as Element | null;
       setInteractive(
         Boolean(
@@ -98,10 +108,23 @@ export function NecroCursor() {
 
     let frame = 0;
     const render = () => {
-      ring.x += (pointer.x - ring.x) * 0.16;
-      ring.y += (pointer.y - ring.y) * 0.16;
+      const hot = interactiveRef.current;
+
+      // A estrela gira devagar; sobre algo clicável, três vezes mais rápido.
+      starAngle = (starAngle + (hot ? 1.5 : 0.45)) % 360;
+      // O círculo gira ao contrário, sempre mais lento que a estrela.
+      ringAngle = (ringAngle - (hot ? 0.7 : 0.22) + 360) % 360;
+
+      // Perseguição com atraso: mais frouxo parado, mais firme sobre um alvo.
+      const ease = hot ? 0.24 : 0.14;
+      ring.x += (pointer.x - ring.x) * ease;
+      ring.y += (pointer.y - ring.y) * ease;
+
+      if (starRef.current) {
+        starRef.current.style.transform = `translate3d(${pointer.x}px, ${pointer.y}px, 0) rotate(${starAngle}deg)`;
+      }
       if (ringRef.current) {
-        ringRef.current.style.transform = `translate3d(${ring.x}px, ${ring.y}px, 0)`;
+        ringRef.current.style.transform = `translate3d(${ring.x}px, ${ring.y}px, 0) rotate(${ringAngle}deg)`;
       }
 
       context.clearRect(0, 0, window.innerWidth, window.innerHeight);
@@ -116,11 +139,11 @@ export function NecroCursor() {
         ember.y -= 0.5;
         ember.x += ember.drift;
 
-        const alpha = ember.life * 0.75;
+        const alpha = ember.life * 0.7;
         // Vermelho vivo no início, esmaecendo para osso no fim.
         const red = 190 + Math.floor(60 * ember.life);
-        const green = Math.floor(40 * (1 - ember.life)) + 12;
-        context.fillStyle = `rgba(${red}, ${green}, ${green}, ${alpha})`;
+        const rest = Math.floor(40 * (1 - ember.life)) + 12;
+        context.fillStyle = `rgba(${red}, ${rest}, ${rest}, ${alpha})`;
         context.beginPath();
         context.arc(ember.x, ember.y, ember.size * ember.life, 0, Math.PI * 2);
         context.fill();
@@ -148,6 +171,13 @@ export function NecroCursor() {
 
   if (!enabled) return null;
 
+  const ink = interactive ? '#cf1a26' : '#e8e5dd';
+  // A estrela ocupa 76% da própria caixa e o aro interno 83% da dele. Os
+  // tamanhos abaixo deixam as pontas quase encostando no aro, como no símbolo
+  // original — sobra só a folga que deixa as duas camadas legíveis ao girar.
+  const starSize = interactive ? 38 : 28;
+  const ringSize = interactive ? 44 : 32;
+
   return (
     <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[100]">
       <canvas
@@ -156,57 +186,71 @@ export function NecroCursor() {
         style={{ opacity: visible ? 0.85 : 0 }}
       />
 
-      {/* Anel que persegue com atraso */}
+      {/*
+        Os contêineres têm tamanho zero de propósito: assim `transform-origin`
+        cai exatamente sobre o ponteiro, e a rotação aplicada neles gira o
+        sigilo em torno do próprio centro — não em torno de um canto.
+      */}
+
+      {/* Círculo duplo — persegue com atraso, gira ao contrário */}
       <div
         ref={ringRef}
-        className="absolute top-0 left-0 transition-opacity duration-200"
+        className="absolute top-0 left-0 h-0 w-0 transition-opacity duration-200"
         style={{ opacity: visible ? 1 : 0 }}
       >
-        <div
-          className="rounded-full border transition-all duration-200 ease-out"
+        <DoubleRing
+          strokeWidth={interactive ? 2.4 : 1.8}
+          className="absolute transition-all duration-200 ease-out"
           style={{
-            width: interactive ? 46 : 30,
-            height: interactive ? 46 : 30,
-            borderColor: interactive ? 'rgba(207,26,38,0.85)' : 'rgba(139,133,120,0.45)',
-            boxShadow: interactive ? '0 0 20px rgba(207,26,38,0.45)' : 'none',
-            transform: `translate(-50%, -50%) scale(${pressed ? 0.72 : 1})`,
+            width: ringSize,
+            height: ringSize,
+            left: -ringSize / 2,
+            top: -ringSize / 2,
+            color: ink,
+            opacity: interactive ? 0.95 : 0.5,
+            filter: interactive ? 'drop-shadow(0 0 8px rgba(207,26,38,0.7))' : 'none',
           }}
         />
       </div>
 
-      {/* Caveira colada no ponteiro */}
+      {/* Heptagrama — colado no ponteiro */}
       <div
-        ref={skullRef}
-        className="absolute top-0 left-0 transition-opacity duration-200"
+        ref={starRef}
+        className="absolute top-0 left-0 h-0 w-0 transition-opacity duration-200"
         style={{ opacity: visible ? 1 : 0 }}
       >
-        <svg
-          viewBox="0 0 64 64"
-          className="transition-transform duration-200 ease-out"
+        <HeptagramStar
+          strokeWidth={interactive ? 3.4 : 2.8}
+          className="absolute transition-all duration-200 ease-out"
           style={{
-            width: interactive ? 26 : 20,
-            height: interactive ? 26 : 20,
-            transform: `translate(-50%, -50%) rotate(${pressed ? -12 : 0}deg) scale(${pressed ? 0.85 : 1})`,
+            width: starSize,
+            height: starSize,
+            left: -starSize / 2,
+            top: -starSize / 2,
+            color: ink,
+            transform: `scale(${pressed ? 0.75 : 1})`,
             filter: interactive
               ? 'drop-shadow(0 0 6px rgba(207,26,38,0.9))'
-              : 'drop-shadow(0 0 3px rgba(0,0,0,0.9))',
+              : 'drop-shadow(0 1px 2px rgba(0,0,0,0.9))',
           }}
-        >
-          <path
-            fill={interactive ? '#cf1a26' : '#e8e5dd'}
-            d="M32 4C18.7 4 8.5 13.9 8.5 27.2c0 7 2.8 12 6.6 15.3 1.5 1.3 2.2 2.2 2.4 3.7l.6 4.4c.3 2.2 2.1 3.8 4.3 3.8h20.2c2.2 0 4-1.6 4.3-3.8l.6-4.4c.2-1.5.9-2.4 2.4-3.7 3.8-3.3 6.6-8.3 6.6-15.3C55.5 13.9 45.3 4 32 4Z"
-          />
-          <ellipse cx="22.5" cy="28" rx="6.6" ry="7.8" fill="#050506" />
-          <ellipse cx="41.5" cy="28" rx="6.6" ry="7.8" fill="#050506" />
-          <path
-            d="M32 35c1.9 0 3.6 2.7 3.6 4.8S34.1 42.4 32 42.4s-3.6-.9-3.6-2.6S30.1 35 32 35Z"
-            fill="#050506"
-          />
-          <path
-            d="M24 47h2.6v7.4H24zm5.7 0h2.6v7.4h-2.6zm5.7 0H38v7.4h-2.6z"
-            fill="#050506"
-          />
-        </svg>
+        />
+
+        {/*
+          Ponto exato do ponteiro. O sigilo é simétrico e sem bico, então sem
+          esta marca não dá para saber onde se está clicando. Gira junto com o
+          contêiner, mas por estar centrado na origem da rotação não se move.
+        */}
+        <span
+          className="absolute rounded-full"
+          style={{
+            width: 3,
+            height: 3,
+            left: -1.5,
+            top: -1.5,
+            backgroundColor: ink,
+            boxShadow: '0 0 3px rgba(0,0,0,0.9)',
+          }}
+        />
       </div>
     </div>
   );

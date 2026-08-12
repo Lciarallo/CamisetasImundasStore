@@ -33,6 +33,93 @@ function Pentagram({ strokeWidth, ...rest }: SigilProps) {
   );
 }
 
+/**
+ * Heptagrama {7/3} — sete pontas, uma voltada para baixo, traçado ligando
+ * cada vértice ao terceiro seguinte. É o sigilo do cursor, então o caminho
+ * vive aqui para poder ser reaproveitado como estampa.
+ *
+ * Vértices em r=38 num viewBox 0 0 100 100, começando na ponta inferior.
+ */
+export const HEPTAGRAM_PATH =
+  'M50.0 88.0 L33.5 15.8 L79.7 73.7 L13.0 41.5 L87.0 41.5 L20.3 73.7 L66.5 15.8 Z';
+
+/** Só a estrela, sem os círculos — o cursor anima as duas partes separadas. */
+export function HeptagramStar({ strokeWidth = 2.4, ...rest }: SigilProps) {
+  return (
+    <svg viewBox="0 0 100 100" aria-hidden="true" {...rest}>
+      <path
+        d={HEPTAGRAM_PATH}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinejoin="miter"
+        // Pontas agudas precisam de folga no miter, senão o SVG as corta em bisel.
+        strokeMiterlimit={10}
+      />
+    </svg>
+  );
+}
+
+/**
+ * O círculo duplo que envolve o sigilo, com sete marcações entre os aros —
+ * uma por ponta do heptagrama. Sem elas a rotação do anel seria invisível:
+ * dois círculos concêntricos girando não mudam nada na tela.
+ */
+export function DoubleRing({ strokeWidth = 2, ...rest }: SigilProps) {
+  const ticks = Array.from({ length: 7 }, (_, i) => (i * 360) / 7);
+
+  return (
+    <svg viewBox="0 0 100 100" aria-hidden="true" {...rest}>
+      <circle cx="50" cy="50" r="47" fill="none" stroke="currentColor" strokeWidth={strokeWidth} />
+      <circle
+        cx="50"
+        cy="50"
+        r="41.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth * 0.8}
+      />
+      {ticks.map((angle) => (
+        <line
+          key={angle}
+          x1="50"
+          y1="3"
+          x2="50"
+          y2="8.5"
+          stroke="currentColor"
+          strokeWidth={strokeWidth * 0.9}
+          transform={`rotate(${angle} 50 50)`}
+        />
+      ))}
+    </svg>
+  );
+}
+
+/** Sigilo completo: heptagrama dentro do círculo duplo. */
+export function HeptagramSigil({ strokeWidth = 2, ...rest }: SigilProps) {
+  return (
+    <svg viewBox="0 0 100 100" aria-hidden="true" {...rest}>
+      <circle cx="50" cy="50" r="47" fill="none" stroke="currentColor" strokeWidth={strokeWidth} />
+      <circle
+        cx="50"
+        cy="50"
+        r="41.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth * 0.8}
+      />
+      <path
+        d={HEPTAGRAM_PATH}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth * 0.8}
+        strokeLinejoin="miter"
+        strokeMiterlimit={10}
+      />
+    </svg>
+  );
+}
+
 function Skull({ strokeWidth, ...rest }: SigilProps) {
   return (
     <svg viewBox="0 0 100 100" aria-hidden="true" {...rest}>
@@ -146,6 +233,7 @@ function Eye({ strokeWidth, ...rest }: SigilProps) {
 
 const REGISTRY: Record<Sigil, (p: SigilProps) => React.ReactElement> = {
   pentagram: Pentagram,
+  heptagram: HeptagramSigil,
   skull: Skull,
   cross: Cross,
   goat: Goat,
