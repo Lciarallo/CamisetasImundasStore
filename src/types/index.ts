@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Modelo de domínio — Necroteca Black Metal Store
+   Modelo de domínio — Camisetas Insanas — Black Metal Store
    ========================================================================== */
 
 export type Size = 'P' | 'M' | 'G' | 'GG' | 'XGG';

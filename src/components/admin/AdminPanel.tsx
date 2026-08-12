@@ -13,6 +13,7 @@ import {
 import { ROLE_LABEL, type Permission } from '../../types';
 import { useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
+import { BrandLogo } from '../art/BrandLogo';
 import { AdminLogin } from './AdminLogin';
 import { Dashboard } from './Dashboard';
 import { OrdersAdmin } from './OrdersAdmin';
@@ -68,10 +69,9 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
         }`}
       >
         <div className="flex items-center gap-2.5 border-b border-smoke px-5 py-4">
-          <SkullMark className="h-7 w-7 text-bone" />
-          <div className="min-w-0">
-            <p className="font-logo text-lg leading-none text-bone">Necroteca</p>
-            <p className="heading-carved mt-1 text-[0.5rem] text-grave">Painel</p>
+          <div className="min-w-0 text-bone">
+            <BrandLogo height={46} />
+            <p className="heading-carved mt-1.5 text-center text-[0.5rem] text-grave">Painel</p>
           </div>
           <button
             onClick={() => setMenuOpen(false)}
@@ -157,7 +157,9 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="font-logo text-lg text-bone">Necroteca</span>
+          <span className="text-bone">
+            <BrandLogo height={34} />
+          </span>
         </header>
 
         <main className="flex-1 p-4 md:p-8">

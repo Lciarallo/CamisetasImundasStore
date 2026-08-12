@@ -15,8 +15,8 @@ export const SEED_USERS: AdminUser[] = [
   {
     id: 'u-001',
     name: 'Lucia Vahl',
-    email: 'mestre@necroteca.com.br',
-    password: 'necroteca',
+    email: 'mestre@camisetasinsanas.com.br',
+    password: 'insanas',
     role: 'mestre',
     permissions: ROLE_PERMISSIONS.mestre,
     active: true,
@@ -26,8 +26,8 @@ export const SEED_USERS: AdminUser[] = [
   {
     id: 'u-002',
     name: 'Corvo Andrade',
-    email: 'necromante@necroteca.com.br',
-    password: 'necroteca',
+    email: 'necromante@camisetasinsanas.com.br',
+    password: 'insanas',
     role: 'necromante',
     permissions: ROLE_PERMISSIONS.necromante,
     active: true,
@@ -37,8 +37,8 @@ export const SEED_USERS: AdminUser[] = [
   {
     id: 'u-003',
     name: 'Ingrid Nyström',
-    email: 'acolito@necroteca.com.br',
-    password: 'necroteca',
+    email: 'acolito@camisetasinsanas.com.br',
+    password: 'insanas',
     role: 'acolito',
     permissions: ROLE_PERMISSIONS.acolito,
     active: true,
@@ -48,8 +48,8 @@ export const SEED_USERS: AdminUser[] = [
   {
     id: 'u-004',
     name: 'Tobias Rehn',
-    email: 'servo@necroteca.com.br',
-    password: 'necroteca',
+    email: 'servo@camisetasinsanas.com.br',
+    password: 'insanas',
     role: 'servo',
     permissions: ROLE_PERMISSIONS.servo,
     active: false,
@@ -59,7 +59,7 @@ export const SEED_USERS: AdminUser[] = [
 
 export const SEED_COUPONS: Coupon[] = [
   { code: 'CULTO10', percent: 10, minSubtotal: 150, active: true },
-  { code: 'NECRO20', percent: 20, minSubtotal: 400, active: true },
+  { code: 'INSANA20', percent: 20, minSubtotal: 400, active: true },
   { code: 'INVERNO15', percent: 15, minSubtotal: 250, active: false },
 ];
 

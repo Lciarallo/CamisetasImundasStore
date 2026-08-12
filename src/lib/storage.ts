@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-const PREFIX = 'necroteca:';
+const PREFIX = 'camisetas-insanas:';
 
 /**
  * Estado persistido em localStorage. Serve de camada de dados enquanto não há

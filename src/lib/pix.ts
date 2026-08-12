@@ -81,8 +81,8 @@ export function buildPixPayload({
 }
 
 /** Dados do recebedor da loja. Trocar pela chave real do lojista. */
-export const NECROTECA_PIX = {
-  key: 'pagamentos@necroteca.com.br',
-  merchantName: 'NECROTECA STORE',
+export const INSANAS_PIX = {
+  key: 'pagamentos@camisetasinsanas.com.br',
+  merchantName: 'CAMISETAS INSANAS',
   merchantCity: 'SAO PAULO',
 } as const;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Menu, Search, ShieldHalf, ShoppingBag, X } from 'lucide-react';
 import { CATEGORIES, type Category } from '../../types';
-import { SkullMark } from '../art/Sigils';
+import { BrandLogo } from '../art/BrandLogo';
 
 interface HeaderProps {
   cartCount: number;
@@ -59,11 +59,8 @@ export function Header({
           {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
 
-        <a href="#topo" className="flex shrink-0 items-center gap-2.5">
-          <SkullMark className="h-8 w-8 text-bone" />
-          <span className="font-logo text-2xl leading-none text-bone md:text-[1.75rem]">
-            Necroteca
-          </span>
+        <a href="#topo" className="shrink-0 text-bone transition-colors hover:text-blood-bright">
+          <BrandLogo height={58} />
         </a>
 
         <div className="relative ml-auto hidden max-w-xs flex-1 items-center md:flex lg:ml-8 lg:max-w-md">

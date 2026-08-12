@@ -1,5 +1,5 @@
 import { CreditCard, DiscAlbum, Hammer, Package, RadioTower, ShieldCheck } from 'lucide-react';
-import { SkullMark } from '../art/Sigils';
+import { BrandLogo } from '../art/BrandLogo';
 
 const COLUMNS: { title: string; links: string[] }[] = [
   {
@@ -73,9 +73,8 @@ export function Footer() {
       {/* Colunas */}
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-[1.5fr_repeat(3,1fr)] md:px-8">
         <div>
-          <div className="flex items-center gap-2.5">
-            <SkullMark className="h-8 w-8 text-bone" />
-            <span className="font-logo text-2xl text-bone">Necroteca</span>
+          <div className="text-bone">
+            <BrandLogo height={66} />
           </div>
           <p className="mt-4 max-w-xs text-[0.75rem] leading-relaxed text-grave">
             Loja independente de camisetas de black metal. Serigrafia manual em tiragem
@@ -85,7 +84,7 @@ export function Footer() {
           <div className="mt-5 flex gap-2">
             {[
               { icon: DiscAlbum, label: 'Bandcamp do selo' },
-              { icon: RadioTower, label: 'Rádio Necroteca' },
+              { icon: RadioTower, label: 'Rádio Insana' },
             ].map(({ icon: Icon, label }) => (
               <a
                 key={label}
@@ -126,7 +125,7 @@ export function Footer() {
 
       <div className="border-t border-smoke">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-[0.65rem] text-dust md:flex-row md:px-8">
-          <p>© 2026 Necroteca Store · CNPJ 00.000.000/0001-00 · Projeto fictício</p>
+          <p>© 2026 Camisetas Insanas · CNPJ 00.000.000/0001-00 · Projeto fictício</p>
           <p className="flex items-center gap-3">
             <span>PIX</span>
             <span>·</span>

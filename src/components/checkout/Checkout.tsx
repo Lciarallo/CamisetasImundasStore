@@ -24,9 +24,10 @@ import {
   onlyDigits,
 } from '../../lib/format';
 import { BRAND_LABEL, buildInstallments, cardLast4, detectBrand } from '../../lib/card';
-import { NECROTECA_PIX, buildPixPayload } from '../../lib/pix';
+import { INSANAS_PIX, buildPixPayload } from '../../lib/pix';
 import { useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
+import { BrandLogo } from '../art/BrandLogo';
 import { TeeArtwork } from '../art/TeeArtwork';
 import { CardForm, EMPTY_CARD, validateCard, type CardState } from './CardForm';
 import { PIX_DISCOUNT, PixPanel } from './PixPanel';
@@ -87,10 +88,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
   const pixPayload = useMemo(
     () =>
       buildPixPayload({
-        ...NECROTECA_PIX,
+        ...INSANAS_PIX,
         amount: Number(pixTotal.toFixed(2)),
-        txId: `NECRO${Math.floor(cartTotals.total * 100)}`,
-        description: 'Pedido Necroteca Store',
+        txId: `INSANA${Math.floor(cartTotals.total * 100)}`,
+        description: 'Pedido Camisetas Insanas',
       }),
     [pixTotal, cartTotals.total],
   );
@@ -274,9 +275,8 @@ export function Checkout({ onBack }: { onBack: () => void }) {
             <ArrowLeft className="h-4 w-4" />
             Voltar
           </button>
-          <div className="mx-auto flex items-center gap-2.5">
-            <SkullMark className="h-6 w-6 text-bone" />
-            <span className="font-logo text-xl text-bone">Necroteca</span>
+          <div className="mx-auto text-bone">
+            <BrandLogo height={44} />
           </div>
           <span className="flex items-center gap-1.5 text-[0.65rem] text-grave">
             <Lock className="h-3 w-3 text-blood-bright" />

@@ -1,4 +1,4 @@
-# 💀 Necroteca — Black Metal Store
+# 💀 Camisetas Insanas — Black Metal Store
 
 > **Vestidos para o fim** — camisetas de banda de black metal, pronta-entrega e sob encomenda.
 
@@ -36,7 +36,7 @@ Monocromática por conceito: **breu**, **osso** e **sangue**. Nada mais.
 - Cartão com seletor rápido de tamanho, aviso de escassez e prazo de produção.
 - Modal com ficha técnica, tabela de medidas em centímetros e seletor de quantidade.
 - Sacola lateral com barra de progresso do frete grátis e cupons
-  (`CULTO10`, `NECRO20`).
+  (`CULTO10`, `INSANA20`).
 
 ## 💳 Checkout
 
@@ -52,14 +52,14 @@ Página dedicada em três etapas, no padrão de loja grande, com resumo fixo lat
 
 ## 🛡️ Painel administrativo
 
-Acesse em `#/admin`. Quatro contas de demonstração, senha `necroteca`:
+Acesse em `#/admin`. Quatro contas de demonstração, senha `insanas`:
 
 | Cargo | Conta | Alcance |
 |---|---|---|
-| **Mestre** | `mestre@necroteca.com.br` | Tudo. Não pode ser rebaixado nem removido. |
-| **Necromante** | `necromante@necroteca.com.br` | Catálogo, estoque, pedidos e faturamento. |
-| **Acólito** | `acolito@necroteca.com.br` | Pedidos e estoque. Sem faturamento. |
-| **Servo** | `servo@necroteca.com.br` | Somente leitura (conta desativada, para testar o bloqueio). |
+| **Mestre** | `mestre@camisetasinsanas.com.br` | Tudo. Não pode ser rebaixado nem removido. |
+| **Necromante** | `necromante@camisetasinsanas.com.br` | Catálogo, estoque, pedidos e faturamento. |
+| **Acólito** | `acolito@camisetasinsanas.com.br` | Pedidos e estoque. Sem faturamento. |
+| **Servo** | `servo@camisetasinsanas.com.br` | Somente leitura (conta desativada, para testar o bloqueio). |
 
 - **Painel**: faturamento, pedidos, ticket médio e peças vendidas com variação
   contra o período anterior; série diária com crosshair; ranking de peças e

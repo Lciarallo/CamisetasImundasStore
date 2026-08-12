@@ -20,7 +20,7 @@ const blankUser = (): AdminUser => ({
   id: `u-${Date.now().toString(36)}`,
   name: '',
   email: '',
-  password: 'necroteca',
+  password: 'insanas',
   role: 'servo',
   permissions: [...ROLE_PERMISSIONS.servo],
   active: true,

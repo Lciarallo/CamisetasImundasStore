@@ -3,6 +3,7 @@ import { ArrowLeft, LoaderCircle } from 'lucide-react';
 import { ROLE_LABEL } from '../../types';
 import { useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
+import { BrandLogo } from '../art/BrandLogo';
 
 export function AdminLogin({ onBack }: { onBack: () => void }) {
   const { signIn, users } = useStore();
@@ -40,10 +41,12 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
 
         <form onSubmit={submit} className="panel-raised anim-rise p-7">
           <div className="text-center">
-            <SkullMark className="mx-auto h-12 w-12 text-blood-bright" />
-            <h1 className="mt-4 font-logo text-2xl text-bone">Câmara dos Mestres</h1>
+            <span className="inline-block text-blood-bright">
+              <BrandLogo height={78} />
+            </span>
+            <h1 className="heading-carved mt-5 text-xs text-bone">Câmara dos Mestres</h1>
             <p className="mt-1.5 text-[0.7rem] text-grave">
-              Acesso restrito ao painel da Necroteca
+              Acesso restrito ao painel da Camisetas Insanas
             </p>
           </div>
 
@@ -57,7 +60,7 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
                 onChange={(event) => setEmail(event.target.value)}
                 required
                 className="field"
-                placeholder="voce@necroteca.com.br"
+                placeholder="voce@camisetasinsanas.com.br"
               />
             </div>
             <div>
@@ -95,7 +98,7 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
         {/* Contas de demonstração — projeto fictício, sem dados reais. */}
         <div className="panel mt-4 p-4">
           <p className="heading-carved text-[0.55rem] text-grave">
-            Contas de demonstração · senha “necroteca”
+            Contas de demonstração · senha “insanas”
           </p>
           <ul className="mt-3 space-y-1.5">
             {users.map((user) => (
@@ -103,7 +106,7 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
                 <button
                   onClick={() => {
                     setEmail(user.email);
-                    setPassword('necroteca');
+                    setPassword('insanas');
                     setError('');
                   }}
                   disabled={!user.active}
