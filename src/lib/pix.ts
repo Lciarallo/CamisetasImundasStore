@@ -66,7 +66,7 @@ export function buildPixPayload({
 
   const payload =
     emv('00', '01') + // Payload Format Indicator
-    emv('01', '12') + // Point of Initiation: 12 = QR reutilizável até expirar
+    emv('01', '12') + // Point of Initiation: 12 = dinâmico, um pagamento só
     merchantAccount +
     emv('52', '0000') + // Merchant Category Code — 0000 = não informado
     emv('53', '986') + // Moeda: 986 = BRL

@@ -63,7 +63,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
   const [processing, setProcessing] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
 
-  useEffect(() => window.scrollTo({ top: 0 }), [step]);
+  // Corpo de bloco de propósito: com corpo de expressão o efeito devolveria o
+  // retorno de scrollTo, e o React tentaria chamá-lo como função de limpeza.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [step]);
 
   // PIX à vista sai mais barato; cartão e boleto pagam o total cheio.
   const pixTotal = cartTotals.total * (1 - PIX_DISCOUNT);

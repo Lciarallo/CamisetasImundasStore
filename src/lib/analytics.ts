@@ -80,7 +80,10 @@ export function buildDashboard(
   });
 
   /* Rankings -------------------------------------------------------------- */
-  const productRevenue = new Map<string, { name: string; band: string; value: number }>();
+  const productRevenue = new Map<
+    string,
+    { name: string; units: number; value: number }
+  >();
   const bandRevenue = new Map<string, number>();
   let readyToShip = 0;
   let madeToOrder = 0;
@@ -92,7 +95,7 @@ export function buildDashboard(
       const entry = productRevenue.get(line.productId);
       productRevenue.set(line.productId, {
         name: line.name,
-        band: line.band,
+        units: (entry?.units ?? 0) + line.quantity,
         value: (entry?.value ?? 0) + gross,
       });
       bandRevenue.set(line.band, (bandRevenue.get(line.band) ?? 0) + gross);
@@ -105,7 +108,12 @@ export function buildDashboard(
   const topProducts = [...productRevenue.values()]
     .sort((a, b) => b.value - a.value)
     .slice(0, 6)
-    .map((item) => ({ label: item.name, sublabel: item.band, value: item.value }));
+    .map((item) => ({
+      label: item.name,
+      // O nome já começa com a banda; o sublabel carrega o volume, não repete.
+      sublabel: `${item.units} ${item.units === 1 ? 'peça vendida' : 'peças vendidas'}`,
+      value: item.value,
+    }));
 
   const topBands = [...bandRevenue.entries()]
     .sort((a, b) => b[1] - a[1])

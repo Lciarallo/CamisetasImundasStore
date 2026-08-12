@@ -84,7 +84,10 @@ export function TeeArtwork({
           opacity="0.9"
           style={{
             fontFamily: "'UnifrakturMaguntia', serif",
-            fontSize: band.length > 14 ? 20 : 26,
+            // O corpo da peça tem ~140 unidades úteis. Um caractere blackletter
+            // ocupa cerca de 0,58 do corpo da fonte, então derivamos o tamanho
+            // do comprimento do nome em vez de chutar um limite fixo.
+            fontSize: Math.min(26, 140 / (0.58 * Math.max(band.length, 1))),
             letterSpacing: '0.02em',
           }}
         >

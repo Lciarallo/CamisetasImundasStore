@@ -99,7 +99,11 @@ export function Storefront({
 
       <Hero onExplore={scrollToCatalog} />
 
-      <main id="catalogo" className="mx-auto w-full max-w-7xl flex-1 px-4 py-14 md:px-8">
+      {/* scroll-mt compensa o header fixo — senão o título some atrás dele. */}
+      <main
+        id="catalogo"
+        className="mx-auto w-full max-w-7xl flex-1 scroll-mt-44 px-4 py-14 md:px-8"
+      >
         <div className="rule-sigil mb-10">
           <SkullMark className="h-6 w-6 shrink-0 text-iron" />
         </div>
