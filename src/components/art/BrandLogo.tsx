@@ -13,8 +13,12 @@ const ASPECT = 1.306;
  */
 export function BrandLogo({
   className = '',
-  /** Altura em px. A largura sai da proporção do arquivo. */
-  height = 44,
+  /**
+   * Altura em px. Omitir e passar a altura por `className` (`h-14 md:h-20`)
+   * quando ela precisar mudar com o breakpoint — a largura sempre acompanha,
+   * porque vem de `aspect-ratio`, não de um cálculo fixo.
+   */
+  height,
   title = 'Camisetas Insanas',
 }: {
   className?: string;
@@ -25,8 +29,8 @@ export function BrandLogo({
     <span
       className={`inline-block shrink-0 ${className}`}
       style={{
-        width: height * ASPECT,
-        height,
+        ...(height === undefined ? null : { height }),
+        aspectRatio: String(ASPECT),
         backgroundColor: 'currentColor',
         maskImage: `url(${logoUrl})`,
         WebkitMaskImage: `url(${logoUrl})`,

@@ -42,7 +42,7 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
         <form onSubmit={submit} className="panel-raised anim-rise p-7">
           <div className="text-center">
             <span className="inline-block text-blood-bright">
-              <BrandLogo height={78} />
+              <BrandLogo height={104} />
             </span>
             <h1 className="heading-carved mt-5 text-xs text-bone">Câmara dos Mestres</h1>
             <p className="mt-1.5 text-[0.7rem] text-grave">

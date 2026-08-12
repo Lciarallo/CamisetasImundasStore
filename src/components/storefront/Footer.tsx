@@ -74,7 +74,7 @@ export function Footer() {
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-[1.5fr_repeat(3,1fr)] md:px-8">
         <div>
           <div className="text-bone">
-            <BrandLogo height={66} />
+            <BrandLogo height={92} />
           </div>
           <p className="mt-4 max-w-xs text-[0.75rem] leading-relaxed text-grave">
             Loja independente de camisetas de black metal. Serigrafia manual em tiragem

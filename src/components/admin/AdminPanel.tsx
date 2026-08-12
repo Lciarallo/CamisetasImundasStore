@@ -70,7 +70,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
       >
         <div className="flex items-center gap-2.5 border-b border-smoke px-5 py-4">
           <div className="min-w-0 text-bone">
-            <BrandLogo height={46} />
+            <BrandLogo height={60} />
             <p className="heading-carved mt-1.5 text-center text-[0.5rem] text-grave">Painel</p>
           </div>
           <button
@@ -158,7 +158,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
             <Menu className="h-5 w-5" />
           </button>
           <span className="text-bone">
-            <BrandLogo height={34} />
+            <BrandLogo height={44} />
           </span>
         </header>
 

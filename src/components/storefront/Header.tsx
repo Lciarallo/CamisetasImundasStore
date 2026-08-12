@@ -60,7 +60,7 @@ export function Header({
         </button>
 
         <a href="#topo" className="shrink-0 text-bone transition-colors hover:text-blood-bright">
-          <BrandLogo height={58} />
+          <BrandLogo className="h-14 md:h-20" />
         </a>
 
         <div className="relative ml-auto hidden max-w-xs flex-1 items-center md:flex lg:ml-8 lg:max-w-md">

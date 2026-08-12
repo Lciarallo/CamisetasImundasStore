@@ -276,7 +276,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
             Voltar
           </button>
           <div className="mx-auto text-bone">
-            <BrandLogo height={44} />
+            <BrandLogo height={58} />
           </div>
           <span className="flex items-center gap-1.5 text-[0.65rem] text-grave">
             <Lock className="h-3 w-3 text-blood-bright" />
