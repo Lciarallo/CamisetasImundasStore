@@ -286,8 +286,8 @@ export interface AdminUser {
   id: string;
   name: string;
   email: string;
-  /** Demo: senha em claro no localStorage. Em produção → hash no servidor. */
-  password: string;
+  /** Demo: senha em claro no localStorage. Em produção → gerenciada pelo Firebase Auth. */
+  password?: string;
   role: Role;
   /** Privilégios efetivos. Começam no padrão do cargo e podem ser ajustados. */
   permissions: Permission[];

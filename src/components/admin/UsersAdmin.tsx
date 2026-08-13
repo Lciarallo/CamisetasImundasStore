@@ -158,10 +158,10 @@ export function UsersAdmin() {
           user={editing}
           isSelf={editing.id === session?.id}
           onClose={() => setEditing(null)}
-          onSave={(next) => {
-            saveUser(next);
+          onSave={async (next, newPassword) => {
+            const res = await saveUser(next, newPassword);
             setEditing(null);
-            setNotice(`${next.name} salvo com ${next.permissions.length} privilégios.`);
+            setNotice(res.message || `${next.name} salvo com ${next.permissions.length} privilégios.`);
           }}
         />
       )}
@@ -192,13 +192,25 @@ function UserEditor({
   user: AdminUser;
   isSelf: boolean;
   onClose: () => void;
-  onSave: (user: AdminUser) => void;
+  onSave: (user: AdminUser, newPassword?: string) => void;
 }) {
-  const [draft, setDraft] = useState<AdminUser>(user);
-  const update = (patch: Partial<AdminUser>) => setDraft({ ...draft, ...patch });
+  const isNew = Boolean(!user.id || user.id.startsWith('u-'));
+  const [draft, setDraft] = useState<AdminUser>({
+    ...user,
+    name: user.name || '',
+    email: user.email || '',
+    role: user.role || 'servo',
+    permissions: Array.isArray(user.permissions)
+      ? [...user.permissions]
+      : [...(ROLE_PERMISSIONS[user.role || 'servo'] || [])],
+    active: user.active !== false,
+  });
+  const [password, setPassword] = useState('');
+  const update = (patch: Partial<AdminUser>) => setDraft((prev) => ({ ...prev, ...patch }));
 
   const isMaster = user.role === 'mestre';
-  const valid = draft.name.trim() && draft.email.includes('@') && draft.password.length >= 4;
+  const validPassword = isNew ? password.length >= 6 : (password.length === 0 || password.length >= 6);
+  const valid = draft.name.trim().length >= 2 && draft.email.includes('@') && validPassword;
 
   /** Trocar o cargo redefine os privilégios para o padrão dele. */
   const changeRole = (role: Role) =>
@@ -213,9 +225,10 @@ function UserEditor({
     });
   };
 
+  const roleDefaults = ROLE_PERMISSIONS[draft.role] || [];
   const isCustomized =
-    draft.permissions.length !== ROLE_PERMISSIONS[draft.role].length ||
-    draft.permissions.some((p) => !ROLE_PERMISSIONS[draft.role].includes(p));
+    draft.permissions.length !== roleDefaults.length ||
+    draft.permissions.some((p) => !roleDefaults.includes(p));
 
   return (
     <div
@@ -231,7 +244,8 @@ function UserEditor({
       >
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-smoke bg-crypt/95 px-5 py-3.5 backdrop-blur">
           <h2 className="heading-carved text-[0.62rem] text-bone">
-            {user.name ? `Editar ${user.name}` : 'Novo usuário'}
+            {isNew ? 'Novo usuário' : `Editar ${user.name || 'usuário'}`}
+            {isSelf && <span className="ml-2 text-[0.6rem] text-blood-bright">(sua conta)</span>}
           </h2>
           <button onClick={onClose} className="text-grave hover:text-bone" aria-label="Fechar">
             <X className="h-5 w-5" />
@@ -246,6 +260,7 @@ function UserEditor({
                 value={draft.name}
                 onChange={(event) => update({ name: event.target.value })}
                 className="field"
+                placeholder="Nome do integrante"
               />
             </div>
             <div>
@@ -255,20 +270,26 @@ function UserEditor({
                 value={draft.email}
                 onChange={(event) => update({ email: event.target.value })}
                 className="field"
+                placeholder="email@dominio.com"
               />
             </div>
           </div>
 
           <div>
-            <span className="label">Senha</span>
+            <span className="label">
+              {isNew ? 'Senha (mínimo 6 caracteres)' : 'Nova senha (opcional)'}
+            </span>
             <input
-              value={draft.password}
-              onChange={(event) => update({ password: event.target.value })}
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={isNew ? 'Digite uma senha segura' : 'Deixe em branco para manter a senha atual'}
               className="field font-mono text-xs"
             />
             <p className="mt-1 text-[0.6rem] text-dust">
-              Demonstração: a senha fica em texto puro no navegador. Num sistema real,
-              seria hash no servidor.
+              {isNew
+                ? 'A senha será vinculada à autenticação do Firebase Auth.'
+                : 'Preencha apenas caso deseje redefinir a senha deste usuário.'}
             </p>
           </div>
 
@@ -285,6 +306,7 @@ function UserEditor({
                 {ROLES.filter((role) => role !== 'mestre').map((role) => (
                   <button
                     key={role}
+                    type="button"
                     onClick={() => changeRole(role)}
                     className={`border p-3 text-left transition-colors ${
                       draft.role === role
@@ -310,6 +332,7 @@ function UserEditor({
               Privilégios
               {isCustomized && !isMaster && (
                 <button
+                  type="button"
                   onClick={() => changeRole(draft.role)}
                   className="text-[0.6rem] normal-case text-blood-bright hover:underline"
                 >
@@ -366,16 +389,21 @@ function UserEditor({
           </label>
 
           <p className="border-t border-smoke pt-3 text-[0.6rem] text-dust">
-            Criado em {formatDate(draft.createdAt)}
+            {draft.createdAt && `Criado em ${formatDate(draft.createdAt)}`}
             {draft.lastLoginAt && ` · último acesso ${timeAgo(draft.lastLoginAt)}`}
           </p>
         </div>
 
         <footer className="sticky bottom-0 flex justify-end gap-3 border-t border-smoke bg-crypt/95 px-5 py-3.5 backdrop-blur">
-          <button onClick={onClose} className="btn btn-ghost">
+          <button type="button" onClick={onClose} className="btn btn-ghost">
             Cancelar
           </button>
-          <button onClick={() => onSave(draft)} disabled={!valid} className="btn btn-blood">
+          <button
+            type="button"
+            onClick={() => onSave(draft, password.trim() || undefined)}
+            disabled={!valid}
+            className="btn btn-blood"
+          >
             Salvar usuário
           </button>
         </footer>

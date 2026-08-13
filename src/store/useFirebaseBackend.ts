@@ -418,8 +418,9 @@ export function useFirebaseBackend(): StoreValue {
   );
 
   const saveUser = useCallback(
-    (user: AdminUser, password?: string) =>
-      attempt(
+    async (user: AdminUser, password?: string): Promise<Result> => {
+      const isSelf = user.id === session?.id;
+      const res = await attempt(
         () =>
           call('saveStaff', {
             // Conta nova ainda não tem uid; o servidor cria no Auth.
@@ -432,8 +433,33 @@ export function useFirebaseBackend(): StoreValue {
             active: user.active,
           }),
         'Usuário salvo.',
-      ),
-    [],
+      );
+
+      if (res.ok && isSelf) {
+        try {
+          const { auth } = await loadAuth();
+          if (auth.currentUser) {
+            await auth.currentUser.getIdToken(true);
+            setSession((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                    permissions: user.permissions,
+                  }
+                : null,
+            );
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      return res;
+    },
+    [session?.id],
   );
 
   const deleteUser = useCallback(

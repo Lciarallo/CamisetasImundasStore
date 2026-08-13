@@ -353,12 +353,13 @@ export function useLocalBackend(): StoreValue {
   );
 
   const saveUser = useCallback(
-    async (user: AdminUser): Promise<Result> => {
+    async (user: AdminUser, password?: string): Promise<Result> => {
       setUsers((previous) => {
         const exists = previous.some((u) => u.id === user.id);
+        const updated = password ? { ...user, password } : user;
         return exists
-          ? previous.map((u) => (u.id === user.id ? user : u))
-          : [...previous, user];
+          ? previous.map((u) => (u.id === user.id ? updated : u))
+          : [...previous, updated];
       });
       return { ok: true, message: 'Usuário salvo.' };
     },
