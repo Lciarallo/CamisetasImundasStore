@@ -83,12 +83,14 @@ export function Footer() {
           </p>
           <div className="mt-5 flex gap-2">
             {[
-              { icon: DiscAlbum, label: 'Bandcamp do selo', href: 'https://bandcamp.com' },
-              { icon: RadioTower, label: 'Rádio Insana', href: '#catalogo' },
-            ].map(({ icon: Icon, label, href }) => (
+              { icon: DiscAlbum, label: 'Bandcamp do selo', href: 'https://bandcamp.com', isExternal: true },
+              { icon: RadioTower, label: 'Rádio Insana', href: '#catalogo', isExternal: false },
+            ].map(({ icon: Icon, label, href, isExternal }) => (
               <a
                 key={label}
                 href={href}
+                target={isExternal ? '_blank' : undefined}
+                rel={isExternal ? 'noopener noreferrer' : undefined}
                 className="border border-iron p-2 text-grave transition-colors hover:border-blood hover:text-blood-bright"
                 aria-label={label}
                 title={label}

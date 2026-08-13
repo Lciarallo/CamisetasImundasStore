@@ -101,6 +101,11 @@ export function ProductCard({ product, onOpen, onAddToCart }: ProductCardProps) 
                   onMouseEnter={() => setHoveredSize(size)}
                   onMouseLeave={() => setHoveredSize(null)}
                   onClick={() => onAddToCart(product.id, size)}
+                  aria-label={
+                    disabled
+                      ? `Tamanho ${size} de ${product.name} esgotado`
+                      : `Adicionar tamanho ${size} de ${product.name} ao carrinho`
+                  }
                   title={
                     disabled
                       ? `Tamanho ${size} esgotado`

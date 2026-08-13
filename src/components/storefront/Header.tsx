@@ -59,7 +59,11 @@ export function Header({
           {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
 
-        <a href="#topo" className="shrink-0 text-bone transition-colors hover:text-blood-bright">
+        <a
+          href="#topo"
+          className="shrink-0 text-bone transition-colors hover:text-blood-bright"
+          aria-label="Ir para a página inicial"
+        >
           <BrandLogo className="h-14 md:h-20" />
         </a>
 
@@ -80,6 +84,7 @@ export function Header({
             onClick={onOpenAdmin}
             className="flex items-center gap-2 px-3 py-2 text-grave transition-colors hover:text-bone"
             title="Painel administrativo"
+            aria-label="Painel administrativo"
           >
             <ShieldHalf className="h-5 w-5" />
             <span className="heading-carved hidden text-[0.6rem] xl:inline">Painel</span>

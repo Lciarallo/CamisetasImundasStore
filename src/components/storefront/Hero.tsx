@@ -60,8 +60,8 @@ export function Hero({ onExplore }: { onExplore: () => void }) {
             ['4,8', 'nota dos clientes'],
           ].map(([value, label]) => (
             <div key={label} className="bg-crypt px-3 py-5">
-              <dt className="font-display text-2xl font-bold text-bone tabular-nums">{value}</dt>
-              <dd className="heading-carved mt-1 text-[0.55rem] text-grave">{label}</dd>
+              <dd className="font-display text-2xl font-bold text-bone tabular-nums">{value}</dd>
+              <dt className="heading-carved mt-1 text-[0.55rem] text-grave">{label}</dt>
             </div>
           ))}
         </dl>
