@@ -6,7 +6,7 @@ import { SkullMark } from '../art/Sigils';
 import { BrandLogo } from '../art/BrandLogo';
 
 export function AdminLogin({ onBack }: { onBack: () => void }) {
-  const { signIn, users } = useStore();
+  const { signIn, users, mode } = useStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -94,40 +94,47 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
           </button>
         </form>
 
-        {/* Contas de demonstração — projeto fictício, sem dados reais. */}
-        <div className="panel mt-4 p-4">
-          <p className="heading-carved text-[0.55rem] text-grave">
-            Contas de demonstração · senha “insanas”
-          </p>
-          <ul className="mt-3 space-y-1.5">
-            {users.map((user) => (
-              <li key={user.id}>
-                <button
-                  onClick={() => {
-                    setEmail(user.email);
-                    setPassword('insanas');
-                    setError('');
-                  }}
-                  disabled={!user.active}
-                  className="flex w-full items-center justify-between gap-3 border border-smoke px-3 py-2 text-left transition-colors hover:border-blood/60 disabled:opacity-40"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-[0.7rem] text-parchment">
-                      {user.email}
+        {/*
+          Atalho de demonstração, só no modo local: ali as contas são fictícias
+          e todas usam a mesma senha. Com backend de verdade a lista seria um
+          catálogo de e-mails válidos para quem quisesse tentar a sorte — e
+          anunciaria uma senha que não existe.
+        */}
+        {mode === 'local' && (
+          <div className="panel mt-4 p-4">
+            <p className="heading-carved text-[0.55rem] text-grave">
+              Contas de demonstração · senha “insanas”
+            </p>
+            <ul className="mt-3 space-y-1.5">
+              {users.map((user) => (
+                <li key={user.id}>
+                  <button
+                    onClick={() => {
+                      setEmail(user.email);
+                      setPassword('insanas');
+                      setError('');
+                    }}
+                    disabled={!user.active}
+                    className="flex w-full items-center justify-between gap-3 border border-smoke px-3 py-2 text-left transition-colors hover:border-blood/60 disabled:opacity-40"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-[0.7rem] text-parchment">
+                        {user.email}
+                      </span>
+                      <span className="block text-[0.6rem] text-dust">
+                        {ROLE_LABEL[user.role]} · {user.permissions.length} privilégios
+                        {!user.active && ' · desativado'}
+                      </span>
                     </span>
-                    <span className="block text-[0.6rem] text-dust">
-                      {ROLE_LABEL[user.role]} · {user.permissions.length} privilégios
-                      {!user.active && ' · desativado'}
+                    <span className="heading-carved shrink-0 text-[0.55rem] text-blood-bright">
+                      usar
                     </span>
-                  </span>
-                  <span className="heading-carved shrink-0 text-[0.55rem] text-blood-bright">
-                    usar
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

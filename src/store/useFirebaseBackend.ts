@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut as authSignOut,
-} from 'firebase/auth';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { httpsCallable, type FunctionsError } from 'firebase/functions';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import type { FunctionsError } from 'firebase/functions';
 import type {
   AdminUser,
   CartItem,
@@ -20,7 +14,7 @@ import type {
 import { SEED_COUPONS } from '../data/seed';
 import { SEED_PRODUCTS } from '../data/products';
 import { usePersistentState } from '../lib/storage';
-import { firebaseAuth, firestore, functions, storage } from '../lib/firebase';
+import { firestore, loadAuth, loadFunctions, loadStorage } from '../lib/firebase';
 import { availableFor, computeTotals } from './cart';
 import type { OrderDraft, Result, StoreValue } from './types';
 
@@ -32,8 +26,8 @@ function describe(cause: unknown): string {
 }
 
 async function call<TIn, TOut>(name: string, payload: TIn): Promise<TOut> {
-  const fn = httpsCallable<TIn, TOut>(functions(), name);
-  const response = await fn(payload);
+  const { httpsCallable, fns } = await loadFunctions();
+  const response = await httpsCallable<TIn, TOut>(fns, name)(payload);
   return response.data;
 }
 
@@ -68,32 +62,53 @@ export function useFirebaseBackend(): StoreValue {
   /* Sessão                                                                  */
   /* ---------------------------------------------------------------------- */
 
+  // O módulo de autenticação sobe por `import()`, então a assinatura só existe
+  // depois que ele chega — daí a limpeza precisar de um sinalizador, e não só
+  // do retorno de `onAuthStateChanged`.
   useEffect(() => {
-    return onAuthStateChanged(firebaseAuth(), async (user) => {
-      if (!user) {
-        setSession(null);
-        setAuthReady(true);
-        return;
-      }
-      try {
-        // `registerLogin` reaplica as claims: se a conta foi editada com a
-        // sessão aberta, é aqui que o token se acerta.
-        const profile = await call<Record<string, never>, AdminUser & { uid: string }>(
-          'registerLogin',
-          {} as Record<string, never>,
-        );
-        await user.getIdToken(true);
-        setSession({ ...profile, id: profile.uid });
-      } catch (cause) {
-        // Conta sem perfil ou desativada: derruba a sessão em vez de deixar
-        // um usuário logado que nenhuma regra vai autorizar.
-        setSession(null);
-        await authSignOut(firebaseAuth());
-        setError(describe(cause));
-      } finally {
-        setAuthReady(true);
-      }
-    });
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    void loadAuth()
+      .then(({ auth, onAuthStateChanged, signOut: authSignOut }) => {
+        if (cancelled) return;
+
+        unsubscribe = onAuthStateChanged(auth, async (user) => {
+          if (!user) {
+            setSession(null);
+            setAuthReady(true);
+            return;
+          }
+          try {
+            // `registerLogin` reaplica as claims: se a conta foi editada com a
+            // sessão aberta, é aqui que o token se acerta.
+            const profile = await call<Record<string, never>, AdminUser & { uid: string }>(
+              'registerLogin',
+              {} as Record<string, never>,
+            );
+            await user.getIdToken(true);
+            setSession({ ...profile, id: profile.uid });
+          } catch (cause) {
+            // Conta sem perfil ou desativada: derruba a sessão em vez de deixar
+            // um usuário logado que nenhuma regra vai autorizar.
+            setSession(null);
+            await authSignOut(auth);
+            setError(describe(cause));
+          } finally {
+            setAuthReady(true);
+          }
+        });
+      })
+      .catch(() => {
+        // Sem o módulo não há sessão possível, mas a vitrine continua de pé —
+        // travar em "carregando" seria pior do que seguir como visitante.
+        if (!cancelled) setAuthReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, []);
 
   /* ---------------------------------------------------------------------- */
@@ -338,9 +353,10 @@ export function useFirebaseBackend(): StoreValue {
   }, []);
 
   const uploadPhoto = useCallback(async (productId: string, file: Blob): Promise<string> => {
+    const { bucket, ref, uploadBytes, getDownloadURL } = await loadStorage();
     // Nome único: subir duas fotos com o mesmo nome sobrescreveria a primeira.
     const name = `${Date.now().toString(36)}-${Math.round(Math.random() * 1e6).toString(36)}.webp`;
-    const target = ref(storage(), `products/${productId}/${name}`);
+    const target = ref(bucket, `products/${productId}/${name}`);
     await uploadBytes(target, file, { contentType: file.type || 'image/webp' });
     return getDownloadURL(target);
   }, []);
@@ -351,15 +367,16 @@ export function useFirebaseBackend(): StoreValue {
 
   const signIn = useCallback(
     (email: string, password: string) =>
-      attempt(
-        () => signInWithEmailAndPassword(firebaseAuth(), email.trim(), password),
-        'Bem-vindo.',
-      ),
+      attempt(async () => {
+        const { auth, signInWithEmailAndPassword } = await loadAuth();
+        return signInWithEmailAndPassword(auth, email.trim(), password);
+      }, 'Bem-vindo.'),
     [],
   );
 
   const signOut = useCallback(async () => {
-    await authSignOut(firebaseAuth());
+    const { auth, signOut: authSignOut } = await loadAuth();
+    await authSignOut(auth);
     setSession(null);
   }, []);
 
@@ -396,9 +413,10 @@ export function useFirebaseBackend(): StoreValue {
     async (input: { name: string; email: string; password: string }): Promise<Result> => {
       try {
         await call('bootstrap', input);
-        await signInWithEmailAndPassword(firebaseAuth(), input.email.trim(), input.password);
+        const { auth, signInWithEmailAndPassword } = await loadAuth();
+        await signInWithEmailAndPassword(auth, input.email.trim(), input.password);
         // Token novo já traz as claims de Mestre, necessárias para o seed.
-        await firebaseAuth().currentUser?.getIdToken(true);
+        await auth.currentUser?.getIdToken(true);
 
         await call('seedCatalog', {
           products: SEED_PRODUCTS.map(({ id, ...rest }) => ({ id, product: rest })),

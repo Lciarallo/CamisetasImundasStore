@@ -19,8 +19,8 @@ Monocromática por conceito: **breu**, **osso** e **sangue**. Nada mais.
   (títulos gravados) e `Inter` (interface).
 - **Fotos reais das peças**, com até 4 por produto — a primeira é a capa, o
   resto vira galeria no modal. Sobem por arrastar, colar (Ctrl+V) ou escolher
-  arquivo, e são redimensionadas para 1000px e recomprimidas em WebP antes de
-  guardar (ver [Persistência](#-persistência)).
+  arquivo, e são redimensionadas e recomprimidas em WebP antes de guardar
+  (ver [Fotos](#fotos)).
 - **Estampas em SVG como reserva**: 11 sigilos desenhados à mão (pentagrama,
   heptagrama, caveira, cruz invertida, baphomet, árvore morta, lua, cálice,
   corvo, espada e olho) sobre três cores de tecido. Peça sem foto nunca fica
@@ -59,14 +59,21 @@ Página dedicada em três etapas, no padrão de loja grande, com resumo fixo lat
 
 ## 🛡️ Painel administrativo
 
-Acesse em `#/admin`. Quatro contas de demonstração, senha `insanas`:
+Acesse em `#/admin`. Quatro cargos, com privilégios padrão e ajuste individual:
 
-| Cargo | Conta | Alcance |
-|---|---|---|
-| **Mestre** | `mestre@camisetasinsanas.com.br` | Tudo. Não pode ser rebaixado nem removido. |
-| **Necromante** | `necromante@camisetasinsanas.com.br` | Catálogo, estoque, pedidos e faturamento. |
-| **Acólito** | `acolito@camisetasinsanas.com.br` | Pedidos e estoque. Sem faturamento. |
-| **Servo** | `servo@camisetasinsanas.com.br` | Somente leitura (conta desativada, para testar o bloqueio). |
+| Cargo | Alcance |
+|---|---|
+| **Mestre** | Tudo. Não pode ser rebaixado, desativado nem removido. |
+| **Necromante** | Catálogo, estoque, pedidos e faturamento. |
+| **Acólito** | Pedidos e estoque. Sem faturamento. |
+| **Servo** | Somente leitura. |
+
+No **modo local** existem quatro contas de demonstração com senha `insanas`
+(`mestre@`, `necromante@`, `acolito@` e `servo@camisetasinsanas.com.br`), e a
+tela de login traz um atalho para cada uma. Com backend configurado esse atalho
+some: ali ele seria um catálogo de e-mails válidos para quem quisesse tentar a
+sorte. A primeira conta é criada pela tela de instalação (ver
+[Backend](#-backend-firebase)).
 
 - **Painel**: faturamento, pedidos, ticket médio e peças vendidas com variação
   contra o período anterior; série diária com crosshair; ranking de peças e
@@ -104,38 +111,150 @@ npm run build    # produção
 npm run lint     # oxlint
 ```
 
+Sem nenhuma variável de ambiente a loja sobe em **modo local** e funciona
+inteira — é o que qualquer clone recebe. Para o backend de verdade, siga a
+seção abaixo.
+
+---
+
+## 🔥 Backend (Firebase)
+
+A loja tem dois backends atrás do mesmo contrato
+([`src/store/types.ts`](src/store/types.ts)), escolhido uma vez no carregamento
+do módulo:
+
+| Modo | Quando | Dados | Total do pedido |
+|---|---|---|---|
+| **local** | sem `VITE_FIREBASE_*` | `localStorage` | calculado no cliente |
+| **firebase** | com as variáveis definidas | Firestore + Cloud Storage | recalculado no servidor |
+
+O painel avisa no topo quando está em modo local, para ninguém confundir
+demonstração com loja de verdade.
+
+### O que o servidor garante
+
+O ponto do backend é este: **nada que envolva dinheiro vem do cliente**. Ele
+manda só o que quer comprar e para onde enviar.
+
+- **`placeOrder`** é a única porta para criar um pedido. Lê o preço do banco,
+  aplica cupom, frete, desconto do PIX e juros do parcelamento, e confere e dá
+  baixa no estoque **dentro de uma transação** — duas compras simultâneas da
+  última peça não vendem a mesma unidade duas vezes.
+- **Regras de Firestore e Storage negam por padrão.** Pedido, produto, cupom e
+  privilégio não têm escrita de cliente; só as funções, via Admin SDK, escrevem.
+- **Privilégios vivem em custom claims**, não em documento — autorizar não custa
+  uma leitura extra a cada regra. Documento e claim são gravados juntos em
+  `applyStaffAccess`, senão divergem.
+- **Conta desativada é checada explicitamente**: o token continua válido até
+  expirar, e sem essa checagem alguém banido seguiria operando com o token em
+  mãos.
+- **O Mestre** não pode ser rebaixado, desativado nem duplicado — qualquer um
+  dos três trancaria todo mundo para fora da administração.
+- **Senhas** ficam no Firebase Auth, com hash. Nunca em texto puro, nunca no
+  nosso banco.
+
+### Pagamento
+
+Ainda **simulado** — não há CNPJ nem conta em provedor. Mas o ponto de troca
+está isolado atrás da interface `PaymentGateway`
+([`functions/src/payments.ts`](functions/src/payments.ts)): plugar Mercado Pago,
+Asaas ou Pagar.me é escrever uma implementação e trocar a constante `gateway`,
+sem tocar em `placeOrder` nem no checkout. O webhook já existe com o formato
+certo, **incluindo verificação de assinatura** — o passo que costuma ser
+esquecido e transforma o endpoint numa porta aberta para qualquer um marcar
+pedidos como pagos. Sem `PAYMENT_WEBHOOK_SECRET` definido, ele recusa com 503 em
+vez de aceitar tudo.
+
+### Emuladores
+
+Não custa nada e não depende do plano Blaze. Precisa de Java.
+
+```bash
+cp .env.example .env.local          # preencha e deixe VITE_USE_EMULATORS=true
+firebase emulators:start --only auth,firestore,functions,storage
+npm run dev
+```
+
+Com os emuladores no ar, `node scripts/verify-backend.mjs` roda **55
+verificações ponta a ponta** contra eles — pedido forjado, adulteração de preço,
+privilégio por cargo, conta desativada, estoque sob concorrência e regras de
+Storage. Usa o SDK **cliente** de propósito: o Admin SDK passa por cima das
+regras, e o que interessa é exatamente o que um navegador hostil consegue fazer.
+
+### Publicando
+
+1. **Ative o plano Blaze** no console do Firebase. Cloud Functions exige cartão
+   cadastrado; a cota grátis (2 milhões de chamadas/mês) costuma deixar a conta
+   em R$ 0 numa loja deste porte.
+2. **Habilite** Firestore, Authentication (provedor e-mail/senha) e Storage.
+3. **Registre um app web** e copie as chaves para o `.env.local`. Elas são
+   públicas por natureza — vão no bundle e qualquer um lê. O que protege os
+   dados são as regras e as funções, nunca o sigilo da `apiKey`.
+4. Publique:
+
+   ```bash
+   firebase deploy --only firestore:rules,storage:rules
+   firebase deploy --only functions
+   npm run build && firebase deploy --only hosting
+   ```
+
+5. Abra `#/admin`. Enquanto não houver nenhum administrador, aparece a **tela de
+   instalação**: ela cria o primeiro Mestre e carrega o catálogo inicial. A
+   função por trás se recusa a rodar depois que existe qualquer administrador,
+   então não é uma porta que fica aberta.
+
+As funções rodam em `southamerica-east1` (São Paulo), com teto de 10 instâncias
+— sem esse teto, um pico ou um laço acidental escala sem limite e a conta chega
+junto.
+
 ## 🗄️ Persistência
 
-Os dados vivem em `localStorage` atrás de `usePersistentState`, cuja superfície é
-a mesma de um `useState`. Trocar por uma API de verdade é mudança local em
-[`src/store/StoreContext.tsx`](src/store/StoreContext.tsx), não reescrita.
-O botão **Restaurar dados** no painel devolve tudo ao estado inicial.
+O carrinho fica sempre no navegador: é rascunho do visitante, não dado da loja.
+Guardar no servidor exigiria identificar quem não fez login.
 
-O histórico de 90 dias de pedidos é gerado por um PRNG com semente fixa — os
-gráficos não mudam a cada reload.
+No **modo local** todo o resto também vive em `localStorage`, e o histórico de 90
+dias de pedidos é gerado por um PRNG com semente fixa — os gráficos não mudam a
+cada reload. O botão **Restaurar dados** devolve tudo ao estado inicial.
 
-### Fotos e a cota do navegador
+### Fotos
 
-Sem backend, as fotos viram data URI dentro do `localStorage`, cuja cota é de
+**Com backend**, o arquivo vai para o **Cloud Storage** e só a URL entra no
+documento. Guardar o binário no Firestore esbarraria no teto de 1 MiB por
+documento, faria cada listagem baixar megabytes e perderia o cache de CDN.
+
+**Sem backend**, a foto vira data URI dentro do `localStorage`, cuja cota é de
 poucos megabytes para o domínio inteiro. Uma foto de celular crua tem 3–8 MB e,
-em base64, engorda mais 33% — duas já estourariam tudo. Por isso nada é guardado
-como veio:
+em base64, engorda mais 33% — duas já estourariam tudo.
 
-- reduzida para no máximo 1000px no maior lado;
+Nos dois casos nada é guardado como veio:
+
+- reduzida para no máximo **1600px** (Storage) ou **1000px** (navegador);
 - recomprimida em WebP (JPEG onde o navegador não exporta WebP), com a qualidade
-  caindo em degraus até caber em 600 KB;
+  caindo em degraus até caber no limite do destino;
 - orientação EXIF corrigida via `createImageBitmap`, senão foto tirada com o
   celular deitado chegaria girada;
 - teto de 4 fotos por peça.
 
-Quando mesmo assim o navegador recusa a gravação, o painel avisa em vez de
-falhar calado — quem acabou de subir uma foto veria ela sumir no reload sem
-nenhuma explicação.
+As regras do Storage repetem a checagem de tipo e tamanho: validação de cliente
+serve de conveniência, não de defesa. SVG é recusado — seria um vetor de script
+embutido.
+
+## 📦 Peso da página
+
+Checkout e painel entram por `import()`, e do SDK do Firebase só o Firestore vem
+no pacote inicial: **Auth, Functions e Storage sobem sob demanda**, então quem só
+olha a vitrine nunca baixa o código de login, de chamada de função nem de
+upload.
+
+O que sobra são 230 KB gzip, dos quais 134 KB são o Firestore — o motor de tempo
+real, que mantém catálogo, pedidos e estoque atualizados sem recarregar. Cortá-lo
+significaria trocar o tempo real por refetch manual, o que se paga na vitrine e
+se perde no painel; por isso ficou.
 
 ## 🧱 Stack
 
-React 19 · TypeScript · Vite · Tailwind CSS v4 · lucide-react · qrcode ·
-canvas-confetti · oxlint
+React 19 · TypeScript · Vite · Tailwind CSS v4 · Firebase (Firestore, Auth,
+Storage, Cloud Functions v2) · lucide-react · qrcode · canvas-confetti · oxlint
 
 ## 📄 Licença
 

@@ -52,7 +52,8 @@ const EMPTY_ADDRESS: ShippingAddress = {
 };
 
 export function Checkout({ onBack }: { onBack: () => void }) {
-  const { cart, cartTotals, productById, placeOrder, clearCart, appliedCoupon } = useStore();
+  const { cart, cartTotals, productById, placeOrder, clearCart, appliedCoupon, mode } =
+    useStore();
 
   const [step, setStep] = useState<Step>('identificacao');
   const [customer, setCustomer] = useState<Customer>(EMPTY_CUSTOMER);
@@ -209,7 +210,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
       return;
     }
 
+    // A ordem importa: `clearCart()` esvazia o carrinho, e sem trocar o passo
+    // antes disso a tela cai na guarda de "sacola vazia" — o cliente pagaria e
+    // veria a sacola vazia em vez do número do pedido.
     setPlacedOrder(order);
+    setStep('confirmado');
     clearCart();
 
     // Cinzas caindo, não confete colorido — o tom da loja não comporta festa.
@@ -682,10 +687,17 @@ export function Checkout({ onBack }: { onBack: () => void }) {
             </dl>
           </div>
 
+          {/*
+            Com backend, os dados saem mesmo do navegador — dizer o contrário
+            aqui seria falso justamente na tela em que o visitante digita CPF e
+            endereço.
+          */}
           <p className="mt-3 flex items-start gap-2 text-[0.62rem] leading-relaxed text-dust">
             <Lock className="mt-0.5 h-3 w-3 shrink-0" />
-            Loja fictícia para demonstração. Nenhuma cobrança real é feita e nenhum
-            dado sai do seu navegador.
+            Loja fictícia para demonstração: nenhuma cobrança real é feita.{' '}
+            {mode === 'firebase'
+              ? 'Seus dados são gravados no nosso banco para registrar o pedido.'
+              : 'Nenhum dado sai do seu navegador.'}
           </p>
         </aside>
       </div>
