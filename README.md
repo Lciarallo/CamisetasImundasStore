@@ -6,6 +6,8 @@ E-commerce completo em React + TypeScript + Vite, com vitrine, checkout multi-et
 (PIX, cartão e boleto) e painel administrativo com estatísticas, controle de
 privilégios e gestão de estoque.
 
+**No ar:** https://camisetas-imundas-store.web.app
+
 > ⚠️ Projeto fictício, para demonstração. As bandas foram inventadas para a loja —
 > nenhuma banda real é referenciada. Nenhuma cobrança é processada.
 
@@ -206,6 +208,60 @@ regras, e o que interessa é exatamente o que um navegador hostil consegue fazer
 As funções rodam em `southamerica-east1` (São Paulo), com teto de 10 instâncias
 — sem esse teto, um pico ou um laço acidental escala sem limite e a conta chega
 junto.
+
+### Três armadilhas deste deploy
+
+Todas custaram tempo na primeira publicação. Ficam registradas porque nenhuma
+dá erro óbvio — duas passam despercebidas até alguém usar o painel.
+
+**1. O banco nasce na região errada.** `firebase deploy` cria o Firestore
+sozinho se ele não existir, e escolhe `nam5` (multi-região nos EUA). Com as
+funções em São Paulo, cada leitura dentro da transação de `placeOrder` cruza o
+continente. **A região é permanente**, então crie o banco antes do primeiro
+deploy:
+
+```bash
+firebase firestore:databases:create "(default)" --location southamerica-east1
+```
+
+Se já criou errado e ainda está vazio, dá para apagar e refazer — o nome
+`(default)` fica indisponível por ~3 minutos depois da exclusão.
+
+O Storage é o caso oposto: deixe nos **EUA**. O nível gratuito de 5 GB só vale
+lá, e foto de produto é baixada uma vez e cacheada na borda — a distância não
+entra no caminho crítico como entra no banco.
+
+**2. O primeiro deploy de funções falha em projeto novo.** O erro é
+`iam.serviceaccounts.actAs denied on ...-compute@developer.gserviceaccount.com`.
+Não é permissão sua: a conta de serviço padrão do Compute é criada de forma
+assíncrona quando a API é habilitada, e o deploy chega antes. **Basta repetir.**
+
+**3. `update` não reaplica a permissão de invocação pública.** Esta é a pior,
+porque não aparece em nenhum log de deploy. Quando um deploy falha no meio, as
+funções que ficaram pela metade são tratadas como *update* nas tentativas
+seguintes — e o Firebase só concede o `run.invoker` para `allUsers` no
+**create**. O resultado é uma função que responde **403 do Google Frontend**: no
+navegador vira erro de CORS, e a tela some sem explicação.
+
+Para conferir, chame cada função direto e veja quem responde:
+
+```bash
+curl -s -X POST https://southamerica-east1-SEU-PROJETO.cloudfunctions.net/updateOrderStatus \
+  -H "content-type: application/json" -d '{"data":{}}'
+```
+
+JSON com `"status":"UNAUTHENTICATED"` é o **seu** código respondendo: está certa.
+HTML de `403 Forbidden` é o Google barrando antes: está quebrada. O conserto é
+apagar e recriar:
+
+```bash
+firebase functions:delete NOME --region southamerica-east1 --force
+firebase deploy --only functions
+```
+
+Cuidado ao testar pelo SDK: uma chamada barrada pelo Cloud Run chega ao cliente
+como `functions/unauthenticated`, **igual** a uma chamada legitimamente sem
+login. Só o `curl` acima distingue as duas.
 
 ## 🗄️ Persistência
 
