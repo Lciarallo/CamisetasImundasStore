@@ -12,6 +12,7 @@ service firebase.storage {
 
     function can(permission) {
       return request.auth != null
+        && request.auth.token.active == true
         && request.auth.token.perms is list
         && permission in request.auth.token.perms;
     }

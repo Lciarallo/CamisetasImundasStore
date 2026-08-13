@@ -23,7 +23,15 @@ const SIGILS = [
  * numa função publicada, então a brecha não viaja junto no deploy.
  */
 function isOurBucket(url: string): boolean {
-  if (url.startsWith('https://firebasestorage.googleapis.com/')) return true;
+  const allowedProjectBuckets = [
+    'https://firebasestorage.googleapis.com/v0/b/camisetas-imundas-store.firebasestorage.app/',
+    'https://firebasestorage.googleapis.com/v0/b/camisetas-imundas-store.appspot.com/',
+    'https://firebasestorage.googleapis.com/v0/b/camisetas-imundas-store/',
+  ];
+
+  if (allowedProjectBuckets.some((prefix) => url.startsWith(prefix))) {
+    return true;
+  }
 
   if (process.env.FUNCTIONS_EMULATOR === 'true') {
     return /^http:\/\/(127\.0\.0\.1|localhost):\d+\/v0\/b\//.test(url);

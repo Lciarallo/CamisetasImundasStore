@@ -16,14 +16,7 @@ const REGION = 'southamerica-east1';
  */
 export const bootstrap = onCall({ region: REGION }, async (request) => {
   const db = getFirestore();
-
-  const existing = await db.collection('adminUsers').limit(1).get();
-  if (!existing.empty) {
-    throw new HttpsError(
-      'failed-precondition',
-      'A loja já tem administrador. Use o login normal.',
-    );
-  }
+  const auth = getAuth();
 
   const { email, password, name } = (request.data ?? {}) as {
     email?: string;
@@ -41,8 +34,6 @@ export const bootstrap = onCall({ region: REGION }, async (request) => {
     throw new HttpsError('invalid-argument', 'Nome inválido.');
   }
 
-  const auth = getAuth();
-
   // A conta pode já existir no Auth sem perfil no Firestore — por exemplo se
   // um bootstrap anterior falhou no meio. Reaproveitar evita travar aí.
   let uid: string;
@@ -59,8 +50,6 @@ export const bootstrap = onCall({ region: REGION }, async (request) => {
     uid = created.uid;
   }
 
-  await applyStaffAccess(uid, 'mestre', ROLE_PERMISSIONS.mestre, true);
-
   const doc: AdminUserDoc = {
     name: name.trim(),
     email,
@@ -69,7 +58,32 @@ export const bootstrap = onCall({ region: REGION }, async (request) => {
     active: true,
     createdAt: new Date().toISOString(),
   };
-  await db.collection('adminUsers').doc(uid).set(doc);
+
+  const lockRef = db.collection('counters').doc('bootstrapLock');
+  const userRef = db.collection('adminUsers').doc(uid);
+
+  await db.runTransaction(async (tx) => {
+    const lockSnap = await tx.get(lockRef);
+    if (lockSnap.exists) {
+      throw new HttpsError(
+        'failed-precondition',
+        'A loja já tem administrador. Use o login normal.',
+      );
+    }
+
+    const usersSnap = await tx.get(db.collection('adminUsers').limit(1));
+    if (!usersSnap.empty) {
+      throw new HttpsError(
+        'failed-precondition',
+        'A loja já tem administrador. Use o login normal.',
+      );
+    }
+
+    tx.set(userRef, doc);
+    tx.set(lockRef, { bootstrapped: true, at: new Date().toISOString(), masterUid: uid });
+  });
+
+  await applyStaffAccess(uid, 'mestre', ROLE_PERMISSIONS.mestre, true);
 
   return { uid, ...doc };
 });

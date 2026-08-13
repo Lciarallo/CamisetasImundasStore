@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
@@ -120,7 +121,15 @@ export const paymentWebhook = onRequest(
     }
 
     const signature = request.get('x-webhook-signature');
-    if (signature !== secret) {
+    const isValid = (() => {
+      if (!signature) return false;
+      const bufA = Buffer.from(signature, 'utf8');
+      const bufB = Buffer.from(secret, 'utf8');
+      if (bufA.length !== bufB.length) return false;
+      return timingSafeEqual(bufA, bufB);
+    })();
+
+    if (!isValid) {
       logger.warn('webhook com assinatura inválida', { ip: request.ip });
       response.status(401).send('Assinatura inválida');
       return;
