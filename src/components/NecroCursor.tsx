@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import sigilUrl from '../assets/cursor-sigil.png';
+import sigilUrl from '../assets/cursor-sigil.webp';
 
 /**
  * Cursor temático: o pentagrama traçado à mão, com as duas setas.

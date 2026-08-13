@@ -1,4 +1,4 @@
-import logoUrl from '../../assets/logo-marca.png';
+import logoUrl from '../../assets/logo-marca.webp';
 
 /** Proporção real do arquivo, medida no recorte do traço. */
 const ASPECT = 1.306;

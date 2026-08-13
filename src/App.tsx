@@ -1,17 +1,11 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 import { StoreProvider } from './store/StoreContext';
-import { NecroCursor } from './components/NecroCursor';
 import { Storefront } from './components/storefront/Storefront';
 import { SkullMark } from './components/art/Sigils';
 
-/**
- * Checkout e painel entram sob demanda.
- *
- * A vitrine é o que quase todo visitante carrega, e ela não precisa do painel
- * inteiro — gráficos, CRUD, uploader — nem do gerador de QR do checkout. Sem
- * essa divisão, o SDK do Firebase somado a tudo isso chegava num único pacote
- * de quase 1 MB antes do primeiro produto aparecer.
- */
+const NecroCursor = lazy(() =>
+  import('./components/NecroCursor').then((m) => ({ default: m.NecroCursor })),
+);
 const Checkout = lazy(() =>
   import('./components/checkout/Checkout').then((m) => ({ default: m.Checkout })),
 );
@@ -51,9 +45,17 @@ export function App() {
     window.scrollTo({ top: 0 });
   };
 
+  const isFinePointer =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(pointer: fine)').matches;
+
   return (
     <StoreProvider>
-      <NecroCursor />
+      {isFinePointer && (
+        <Suspense fallback={null}>
+          <NecroCursor />
+        </Suspense>
+      )}
       <div className="grain-overlay" aria-hidden="true" />
       <div className="vignette-overlay" aria-hidden="true" />
 

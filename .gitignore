@@ -29,3 +29,7 @@ dist-ssr
 # Ambiente local
 .env.local
 .env*.local
+
+# Lighthouse reports
+scripts/lighthouse-*.json
+

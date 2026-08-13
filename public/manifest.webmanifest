@@ -1,0 +1,17 @@
+{
+  "name": "Camisetas Insanas — Black Metal Store",
+  "short_name": "Camisetas Insanas",
+  "description": "Loja independente de camisetas de black metal com serigrafia manual.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050506",
+  "theme_color": "#050506",
+  "icons": [
+    {
+      "src": "/skull.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

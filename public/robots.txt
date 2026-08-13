@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://camisetas-imundas-store.web.app/sitemap.xml

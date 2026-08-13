@@ -83,12 +83,12 @@ export function Footer() {
           </p>
           <div className="mt-5 flex gap-2">
             {[
-              { icon: DiscAlbum, label: 'Bandcamp do selo' },
-              { icon: RadioTower, label: 'Rádio Insana' },
-            ].map(({ icon: Icon, label }) => (
+              { icon: DiscAlbum, label: 'Bandcamp do selo', href: 'https://bandcamp.com' },
+              { icon: RadioTower, label: 'Rádio Insana', href: '#catalogo' },
+            ].map(({ icon: Icon, label, href }) => (
               <a
                 key={label}
-                href="#"
+                href={href}
                 className="border border-iron p-2 text-grave transition-colors hover:border-blood hover:text-blood-bright"
                 aria-label={label}
                 title={label}
@@ -111,7 +111,7 @@ export function Footer() {
               {column.links.map((link) => (
                 <li key={link}>
                   <a
-                    href="#"
+                    href="#catalogo"
                     className="text-[0.75rem] text-grave transition-colors hover:text-blood-bright"
                   >
                     {link}
@@ -124,9 +124,9 @@ export function Footer() {
       </div>
 
       <div className="border-t border-smoke">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-[0.65rem] text-dust md:flex-row md:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-[0.68rem] text-grave md:flex-row md:px-8">
           <p>© 2026 Camisetas Insanas · CNPJ 00.000.000/0001-00 · Projeto fictício</p>
-          <p className="flex items-center gap-3">
+          <p className="flex items-center gap-3 text-grave">
             <span>PIX</span>
             <span>·</span>
             <span>Visa</span>

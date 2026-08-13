@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import type { FunctionsError } from 'firebase/functions';
 import type {
   AdminUser,
@@ -14,7 +13,7 @@ import type {
 import { SEED_COUPONS } from '../data/seed';
 import { SEED_PRODUCTS } from '../data/products';
 import { usePersistentState } from '../lib/storage';
-import { firestore, loadAuth, loadFunctions, loadStorage } from '../lib/firebase';
+import { loadFirestore, loadAuth, loadFunctions, loadStorage } from '../lib/firebase';
 import { availableFor, computeTotals } from './cart';
 import type { OrderDraft, Result, StoreValue } from './types';
 
@@ -42,10 +41,10 @@ async function attempt(action: () => Promise<unknown>, success: string): Promise
 }
 
 export function useFirebaseBackend(): StoreValue {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(SEED_PRODUCTS);
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [coupons, setCoupons] = useState<Coupon[]>(SEED_COUPONS);
 
   const [session, setSession] = useState<AdminUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -63,50 +62,48 @@ export function useFirebaseBackend(): StoreValue {
   /* ---------------------------------------------------------------------- */
 
   // O módulo de autenticação sobe por `import()`, então a assinatura só existe
+  // O módulo de autenticação sobe por `import()`, então a assinatura só existe
   // depois que ele chega — daí a limpeza precisar de um sinalizador, e não só
   // do retorno de `onAuthStateChanged`.
   useEffect(() => {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
 
-    void loadAuth()
-      .then(({ auth, onAuthStateChanged, signOut: authSignOut }) => {
-        if (cancelled) return;
+    const timer = setTimeout(() => {
+      void loadAuth()
+        .then(({ auth, onAuthStateChanged, signOut: authSignOut }) => {
+          if (cancelled) return;
 
-        unsubscribe = onAuthStateChanged(auth, async (user) => {
-          if (!user) {
-            setSession(null);
-            setAuthReady(true);
-            return;
-          }
-          try {
-            // `registerLogin` reaplica as claims: se a conta foi editada com a
-            // sessão aberta, é aqui que o token se acerta.
-            const profile = await call<Record<string, never>, AdminUser & { uid: string }>(
-              'registerLogin',
-              {} as Record<string, never>,
-            );
-            await user.getIdToken(true);
-            setSession({ ...profile, id: profile.uid });
-          } catch (cause) {
-            // Conta sem perfil ou desativada: derruba a sessão em vez de deixar
-            // um usuário logado que nenhuma regra vai autorizar.
-            setSession(null);
-            await authSignOut(auth);
-            setError(describe(cause));
-          } finally {
-            setAuthReady(true);
-          }
+          unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+              setSession(null);
+              setAuthReady(true);
+              return;
+            }
+            try {
+              const profile = await call<Record<string, never>, AdminUser & { uid: string }>(
+                'registerLogin',
+                {} as Record<string, never>,
+              );
+              await user.getIdToken(true);
+              setSession({ ...profile, id: profile.uid });
+            } catch (cause) {
+              setSession(null);
+              await authSignOut(auth);
+              setError(describe(cause));
+            } finally {
+              setAuthReady(true);
+            }
+          });
+        })
+        .catch(() => {
+          if (!cancelled) setAuthReady(true);
         });
-      })
-      .catch(() => {
-        // Sem o módulo não há sessão possível, mas a vitrine continua de pé —
-        // travar em "carregando" seria pior do que seguir como visitante.
-        if (!cancelled) setAuthReady(true);
-      });
+    }, 400);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
       unsubscribe?.();
     };
   }, []);
@@ -115,33 +112,46 @@ export function useFirebaseBackend(): StoreValue {
   /* Assinaturas                                                             */
   /* ---------------------------------------------------------------------- */
 
-  // Catálogo: público. Sem sessão só vêm as peças ativas, que é o que as
-  // regras permitem — pedir todas resultaria em erro de permissão.
+  // Catálogo e cupons: públicos. Sem sessão só vêm as peças ativas.
   useEffect(() => {
-    const base = collection(firestore(), 'products');
-    const q = session ? query(base) : query(base, where('active', '==', true));
+    let cancelled = false;
+    let unsubProducts: (() => void) | undefined;
+    let unsubCoupons: (() => void) | undefined;
 
-    return onSnapshot(
-      q,
-      (snap) => {
-        setProducts(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Product));
-        setProductsReady(true);
-        setError(null);
-      },
-      (cause) => {
-        setProductsReady(true);
-        setError(`Catálogo indisponível: ${cause.message}`);
-      },
-    );
+    const timer = setTimeout(() => {
+      void loadFirestore().then(({ db, collection, query, where, onSnapshot }) => {
+        if (cancelled) return;
+        const base = collection(db, 'products');
+        const q = session ? query(base) : query(base, where('active', '==', true));
+
+        unsubProducts = onSnapshot(
+          q,
+          (snap) => {
+            setProducts(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Product));
+            setProductsReady(true);
+            setError(null);
+          },
+          (cause) => {
+            setProductsReady(true);
+            setError(`Catálogo indisponível: ${cause.message}`);
+          },
+        );
+
+        unsubCoupons = onSnapshot(
+          query(collection(db, 'coupons'), where('active', '==', true)),
+          (snap) => setCoupons(snap.docs.map((doc) => ({ code: doc.id, ...doc.data() }) as Coupon)),
+          () => setCoupons([]),
+        );
+      });
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      unsubProducts?.();
+      unsubCoupons?.();
+    };
   }, [session]);
-
-  useEffect(() => {
-    return onSnapshot(
-      query(collection(firestore(), 'coupons'), where('active', '==', true)),
-      (snap) => setCoupons(snap.docs.map((doc) => ({ code: doc.id, ...doc.data() }) as Coupon)),
-      () => setCoupons([]),
-    );
-  }, []);
 
   // Pedidos e equipe só existem para quem tem privilégio; assinar sem ele
   // devolveria erro de permissão a cada render.
@@ -155,17 +165,28 @@ export function useFirebaseBackend(): StoreValue {
       setOrders([]);
       return;
     }
-    return onSnapshot(
-      collection(firestore(), 'orders'),
-      (snap) => {
-        const list = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Order);
-        list.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-        setOrders(list);
-      },
-      (cause) => setError(`Pedidos indisponíveis: ${cause.message}`),
-    );
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+
+    void loadFirestore().then(({ db, collection, onSnapshot }) => {
+      if (cancelled) return;
+      unsub = onSnapshot(
+        collection(db, 'orders'),
+        (snap) => {
+          const list = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Order);
+          list.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+          setOrders(list);
+        },
+        (cause) => setError(`Pedidos indisponíveis: ${cause.message}`),
+      );
+    });
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   }, [canView]);
 
   useEffect(() => {
@@ -173,11 +194,22 @@ export function useFirebaseBackend(): StoreValue {
       setUsers(session ? [session] : []);
       return;
     }
-    return onSnapshot(
-      collection(firestore(), 'adminUsers'),
-      (snap) => setUsers(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as AdminUser)),
-      (cause) => setError(`Equipe indisponível: ${cause.message}`),
-    );
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+
+    void loadFirestore().then(({ db, collection, onSnapshot }) => {
+      if (cancelled) return;
+      unsub = onSnapshot(
+        collection(db, 'adminUsers'),
+        (snap) => setUsers(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as AdminUser)),
+        (cause) => setError(`Equipe indisponível: ${cause.message}`),
+      );
+    });
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   }, [canView, session]);
 
   /* ---------------------------------------------------------------------- */

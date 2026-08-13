@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Suspense, lazy, useMemo, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import type { Category, Product, Size } from '../../types';
 import { normalize } from '../../lib/format';
@@ -7,9 +7,14 @@ import { SkullMark } from '../art/Sigils';
 import { Header } from './Header';
 import { Hero } from './Hero';
 import { ProductCard } from './ProductCard';
-import { ProductModal } from './ProductModal';
-import { CartDrawer } from './CartDrawer';
 import { Footer } from './Footer';
+
+const ProductModal = lazy(() =>
+  import('./ProductModal').then((m) => ({ default: m.ProductModal })),
+);
+const CartDrawer = lazy(() =>
+  import('./CartDrawer').then((m) => ({ default: m.CartDrawer })),
+);
 
 type SortKey = 'destaques' | 'preco-asc' | 'preco-desc' | 'nota' | 'novidades';
 
@@ -183,20 +188,26 @@ export function Storefront({
 
       <Footer />
 
-      <ProductModal
-        product={selected}
-        onClose={() => setSelected(null)}
-        onAddToCart={handleAdd}
-      />
+      <Suspense fallback={null}>
+        {selected && (
+          <ProductModal
+            product={selected}
+            onClose={() => setSelected(null)}
+            onAddToCart={handleAdd}
+          />
+        )}
 
-      <CartDrawer
-        open={cartOpen}
-        onClose={() => setCartOpen(false)}
-        onCheckout={() => {
-          setCartOpen(false);
-          onCheckout();
-        }}
-      />
+        {cartOpen && (
+          <CartDrawer
+            open={cartOpen}
+            onClose={() => setCartOpen(false)}
+            onCheckout={() => {
+              setCartOpen(false);
+              onCheckout();
+            }}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

@@ -27,7 +27,7 @@ export function Hero({ onExplore }: { onExplore: () => void }) {
 
         <h1
           id="hero-title"
-          className="anim-rise font-logo text-5xl leading-[0.95] text-bone text-engraved sm:text-6xl md:text-8xl"
+          className="font-logo text-5xl leading-[0.95] text-bone text-engraved sm:text-6xl md:text-8xl"
         >
           Vestidos
           <br />
@@ -35,16 +35,14 @@ export function Hero({ onExplore }: { onExplore: () => void }) {
         </h1>
 
         <p
-          className="anim-rise mx-auto mt-8 max-w-xl text-[0.95rem] leading-relaxed text-parchment"
-          style={{ animationDelay: '90ms' }}
+          className="mx-auto mt-8 max-w-xl text-[0.95rem] leading-relaxed text-parchment"
         >
           Camisetas, manga longa e moletons de black metal. Serigrafia manual,
           tiragem curta e peças sob encomenda para quem chegou tarde ao culto.
         </p>
 
         <div
-          className="anim-rise mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
-          style={{ animationDelay: '160ms' }}
+          className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
         >
           <button onClick={onExplore} className="btn btn-bone w-full sm:w-auto">
             Ver o catálogo
@@ -70,8 +68,8 @@ export function Hero({ onExplore }: { onExplore: () => void }) {
 
         <button
           onClick={onExplore}
-          className="mt-14 inline-flex flex-col items-center gap-2 text-dust transition-colors hover:text-blood-bright"
-          aria-label="Descer para o catálogo"
+          className="mt-14 inline-flex flex-col items-center gap-2 text-grave transition-colors hover:text-blood-bright"
+          aria-label="Desça para o catálogo"
         >
           <span className="heading-carved text-[0.55rem]">Desça</span>
           <ArrowDown className="h-4 w-4 animate-bounce" />

@@ -124,7 +124,7 @@ export function ProductCard({ product, onOpen, onAddToCart }: ProductCardProps) 
         <div className="mt-auto flex items-end justify-between gap-2 pt-1">
           <div>
             {product.oldPrice && (
-              <p className="text-[0.7rem] text-dust line-through tabular-nums">
+              <p className="text-[0.7rem] text-grave line-through tabular-nums">
                 {money(product.oldPrice)}
               </p>
             )}
