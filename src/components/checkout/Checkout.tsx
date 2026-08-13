@@ -17,6 +17,7 @@ import {
   isValidCPF,
   isValidEmail,
   isValidPhone,
+  isValidUF,
   maskCEP,
   maskCPF,
   maskPhone,
@@ -119,7 +120,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
     if (!address.number.trim()) found.number = 'Informe o número.';
     if (address.district.trim().length < 2) found.district = 'Informe o bairro.';
     if (address.city.trim().length < 2) found.city = 'Informe a cidade.';
-    if (address.state.trim().length !== 2) found.state = 'UF com 2 letras.';
+    if (!isValidUF(address.state)) found.state = 'UF inválida (ex: SP, RJ, MG).';
     return found;
   };
 
@@ -138,7 +139,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
   };
 
   /* ---------------------------------------------------------------------- */
-  /* Busca de CEP                                                           */
+  /* Busca de CEP (ViaCEP / Correios)                                       */
   /* ---------------------------------------------------------------------- */
 
   const lookupCep = useCallback(async (cep: string) => {
@@ -148,16 +149,34 @@ export function Checkout({ onBack }: { onBack: () => void }) {
     setCepLoading(true);
     try {
       const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+      if (!response.ok) throw new Error('Falha na resposta dos Correios');
       const data = await response.json();
-      if (data.erro) return;
 
-      setAddress((previous) => ({
-        ...previous,
-        street: data.logradouro || previous.street,
-        district: data.bairro || previous.district,
-        city: data.localidade || previous.city,
-        state: data.uf || previous.state,
-      }));
+      if (data.erro === true || data.erro === 'true') {
+        setErrors((prev) => ({
+          ...prev,
+          cep: 'CEP não encontrado nos Correios. Verifique o número ou preencha abaixo.',
+        }));
+        return;
+      }
+
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next.cep;
+        return next;
+      });
+
+      setAddress((previous) => {
+        // Se o usuário já tiver trocado de CEP enquanto a requisição rodava, descarta
+        if (onlyDigits(previous.cep) !== digits) return previous;
+        return {
+          ...previous,
+          street: data.logradouro || previous.street,
+          district: data.bairro || previous.district,
+          city: data.localidade || previous.city,
+          state: data.uf || previous.state,
+        };
+      });
     } catch {
       // Offline ou ViaCEP fora do ar: o usuário preenche à mão, sem travar.
     } finally {
@@ -407,6 +426,12 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                     )}
                   </div>
                   <p className="mt-1 text-[0.65rem] text-grave">Preenchemos o resto sozinhos.</p>
+                  {address.city && address.state && isValidCEP(address.cep) && !errors.cep && (
+                    <div className="mt-2 flex items-center gap-1.5 rounded border border-smoke bg-pitch px-2.5 py-1.5 text-[0.68rem] text-parchment">
+                      <Truck className="h-3.5 w-3.5 text-blood-bright shrink-0" />
+                      <span>Correios (PAC/SEDEX) · {address.city}/{address.state}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="sm:col-span-4">

@@ -95,11 +95,14 @@ function parseInput(raw: unknown): PlaceOrderInput {
   if ((customer?.phone ?? '').replace(/\D/g, '').length < 10) fail('Telefone inválido.');
 
   const address = data!.address;
-  if ((address?.cep ?? '').replace(/\D/g, '').length !== 8) fail('CEP inválido.');
+  const cepDigits = (address?.cep ?? '').replace(/\D/g, '');
+  if (cepDigits.length !== 8 || /^0{8}$/.test(cepDigits)) fail('CEP inválido.');
   for (const field of ['street', 'number', 'district', 'city'] as const) {
     if (!isText(address?.[field], 1)) fail(`Endereço incompleto: ${field}.`);
   }
-  if (!isText(address?.state, 2, 2)) fail('UF inválida.');
+  const uf = (address?.state ?? '').trim().toUpperCase();
+  const validUFs = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'];
+  if (!validUFs.includes(uf)) fail('UF inválida.');
 
   const method = data!.payment?.method as PaymentMethod | undefined;
   if (!method || !['pix', 'cartao', 'boleto'].includes(method)) {

@@ -97,7 +97,19 @@ export function isValidCPF(value: string): boolean {
 export const isValidEmail = (value: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
 
-export const isValidCEP = (value: string) => digits(value).length === 8;
+export const isValidCEP = (value: string) => {
+  const d = digits(value);
+  return d.length === 8 && !/^0{8}$/.test(d);
+};
+
+export const BRAZIL_UFS = [
+  'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
+  'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN',
+  'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO',
+] as const;
+
+export const isValidUF = (value: string) =>
+  BRAZIL_UFS.includes(value.trim().toUpperCase() as (typeof BRAZIL_UFS)[number]);
 
 export const isValidPhone = (value: string) => {
   const d = digits(value);
