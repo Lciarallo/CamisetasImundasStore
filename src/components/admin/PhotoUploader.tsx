@@ -2,28 +2,31 @@ import { useCallback, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, ImagePlus, LoaderCircle, Star, Trash2 } from 'lucide-react';
 import {
   ImageError,
-  dataUrlBytes,
   formatBytes,
   imagesFromTransfer,
   prepareImage,
 } from '../../lib/image';
+import { useStore } from '../../store/StoreContext';
 
 /** Teto por peça: além disso o localStorage começa a apertar. */
 const MAX_PHOTOS = 4;
 
 export function PhotoUploader({
+  productId,
   photos,
   onChange,
 }: {
+  productId: string;
   photos: string[];
   onChange: (photos: string[]) => void;
 }) {
+  const { mode, uploadPhoto } = useStore();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const totalBytes = photos.reduce((sum, photo) => sum + dataUrlBytes(photo), 0);
+  const [uploaded, setUploaded] = useState(0);
   const remaining = MAX_PHOTOS - photos.length;
 
   const accept = useCallback(
@@ -42,16 +45,25 @@ export function PhotoUploader({
 
       // Sequencial de propósito: processar em paralelo dispara vários canvas
       // grandes ao mesmo tempo e trava a aba em máquina modesta.
+      let bytes = 0;
       for (const file of files.slice(0, remaining)) {
         try {
-          const prepared = await prepareImage(file);
-          accepted.push(prepared.dataUrl);
+          const prepared = await prepareImage(file, mode);
+          // No modo Firebase a foto vai para o Cloud Storage e só a URL fica
+          // no documento; no local, o próprio data URI é o "endereço".
+          accepted.push(await uploadPhoto(productId, prepared.blob));
+          bytes += prepared.bytes;
         } catch (cause) {
           problems.push(
-            cause instanceof ImageError ? cause.message : `Falha ao ler ${file.name}.`,
+            cause instanceof ImageError
+              ? cause.message
+              : cause instanceof Error
+                ? cause.message
+                : `Falha ao ler ${file.name}.`,
           );
         }
       }
+      setUploaded((previous) => previous + bytes);
 
       if (accepted.length > 0) onChange([...photos, ...accepted]);
       if (files.length > remaining) {
@@ -60,7 +72,7 @@ export function PhotoUploader({
       setError(problems.join(' '));
       setBusy(false);
     },
-    [photos, remaining, onChange],
+    [photos, remaining, onChange, mode, uploadPhoto, productId],
   );
 
   const move = (from: number, to: number) => {
@@ -82,7 +94,8 @@ export function PhotoUploader({
         Fotos da peça
         {photos.length > 0 && (
           <span className="text-[0.6rem] normal-case text-dust tabular-nums">
-            {photos.length}/{MAX_PHOTOS} · {formatBytes(totalBytes)}
+            {photos.length}/{MAX_PHOTOS}
+            {uploaded > 0 && ` · ${formatBytes(uploaded)} enviados`}
           </span>
         )}
       </span>
@@ -112,7 +125,9 @@ export function PhotoUploader({
 
         <p className="text-[0.7rem] text-parchment">
           {busy
-            ? 'Processando…'
+            ? mode === 'firebase'
+              ? 'Enviando…'
+              : 'Processando…'
             : remaining <= 0
               ? `Limite de ${MAX_PHOTOS} fotos atingido`
               : 'Arraste as fotos aqui, cole com Ctrl+V ou'}
@@ -129,7 +144,9 @@ export function PhotoUploader({
         )}
 
         <p className="text-[0.6rem] text-dust">
-          JPG, PNG ou WebP · redimensionadas para 1000px e recomprimidas
+          JPG, PNG ou WebP · {mode === 'firebase'
+            ? 'até 1600px, enviadas para o Cloud Storage'
+            : 'até 1000px, guardadas no navegador'}
         </p>
 
         <input

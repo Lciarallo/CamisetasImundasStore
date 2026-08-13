@@ -45,8 +45,8 @@ export function CartDrawer({ open, onClose, onCheckout }: CartDrawerProps) {
     ((cartTotals.subtotal - cartTotals.discount) / FREE_SHIPPING_THRESHOLD) * 100,
   );
 
-  const handleCoupon = () => {
-    const result = applyCoupon(code);
+  const handleCoupon = async () => {
+    const result = await applyCoupon(code);
     setFeedback(result);
     if (result.ok) setCode('');
   };
@@ -213,12 +213,12 @@ export function CartDrawer({ open, onClose, onCheckout }: CartDrawerProps) {
                       <input
                         value={code}
                         onChange={(event) => setCode(event.target.value.toUpperCase())}
-                        onKeyDown={(event) => event.key === 'Enter' && handleCoupon()}
+                        onKeyDown={(event) => event.key === 'Enter' && void handleCoupon()}
                         placeholder="Cupom de desconto"
                         className="field flex-1 text-xs"
                         aria-label="Código do cupom"
                       />
-                      <button onClick={handleCoupon} className="btn btn-ghost px-4 py-2">
+                      <button onClick={() => void handleCoupon()} className="btn btn-ghost px-4 py-2">
                         Aplicar
                       </button>
                     </div>

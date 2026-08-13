@@ -36,7 +36,7 @@ export function StatusPill({ status }: { status: OrderStatus }) {
 }
 
 export function OrdersAdmin() {
-  const { orders, updateOrderStatus, setTrackingCode, session, can } = useStore();
+  const { orders, updateOrderStatus, setTrackingCode, can } = useStore();
 
   const [filter, setFilter] = useState<OrderStatus | 'todos'>('todos');
   const [search, setSearch] = useState('');
@@ -178,8 +178,8 @@ export function OrdersAdmin() {
           order={current}
           editable={editable}
           onClose={() => setSelected(null)}
-          onStatus={(status) => updateOrderStatus(current.id, status, session?.name)}
-          onTracking={(code) => setTrackingCode(current.id, code)}
+          onStatus={(status) => void updateOrderStatus(current.id, status)}
+          onTracking={(code) => void setTrackingCode(current.id, code)}
         />
       )}
     </div>

@@ -23,6 +23,7 @@ import { OrdersAdmin } from './OrdersAdmin';
 import { ProductsAdmin, ConfirmDialog } from './ProductsAdmin';
 import { StockAdmin } from './StockAdmin';
 import { UsersAdmin } from './UsersAdmin';
+import { BootstrapSetup } from './BootstrapSetup';
 
 interface Tab {
   key: string;
@@ -40,7 +41,8 @@ const TABS: Tab[] = [
 ];
 
 export function AdminPanel({ onExit }: { onExit: () => void }) {
-  const { session, signOut, can, resetEverything } = useStore();
+  const { session, signOut, can, resetEverything, mode, loading, error, needsBootstrap } =
+    useStore();
 
   const [tab, setTab] = useState('painel');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -66,6 +68,15 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
     }
   }, [allowed, tab]);
 
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <SkullMark className="h-12 w-12 animate-pulse text-iron" />
+      </div>
+    );
+  }
+
+  if (needsBootstrap) return <BootstrapSetup onDone={() => setTab('painel')} />;
   if (!session) return <AdminLogin onBack={onExit} />;
 
   const navigate = (next: string) => {
@@ -176,7 +187,28 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
         </header>
 
         <main className="flex-1 p-4 md:p-8">
-          {quotaFull && (
+          {mode === 'local' && (
+            <div className="mb-5 flex items-start gap-3 border border-iron bg-ash/60 p-4">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-grave" />
+              <div className="text-[0.72rem] leading-relaxed text-parchment">
+                <p className="font-semibold text-bone">Modo local, sem backend.</p>
+                <p className="mt-0.5 text-grave">
+                  Os dados vivem só neste navegador e o total do pedido é calculado no
+                  cliente. Configure as variáveis <code>VITE_FIREBASE_*</code> para usar
+                  Firestore, Auth e Cloud Functions.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-5 flex items-start gap-3 border border-ember/50 bg-ember/10 p-4">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-ember" />
+              <p className="text-[0.72rem] leading-relaxed text-parchment">{error}</p>
+            </div>
+          )}
+
+          {quotaFull && mode === 'local' && (
             <div className="mb-5 flex items-start gap-3 border border-ember/50 bg-ember/10 p-4">
               <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-ember" />
               <div className="text-[0.72rem] leading-relaxed text-parchment">

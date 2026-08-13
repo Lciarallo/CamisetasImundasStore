@@ -1,9 +1,23 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { StoreProvider } from './store/StoreContext';
 import { NecroCursor } from './components/NecroCursor';
 import { Storefront } from './components/storefront/Storefront';
-import { Checkout } from './components/checkout/Checkout';
-import { AdminPanel } from './components/admin/AdminPanel';
+import { SkullMark } from './components/art/Sigils';
+
+/**
+ * Checkout e painel entram sob demanda.
+ *
+ * A vitrine é o que quase todo visitante carrega, e ela não precisa do painel
+ * inteiro — gráficos, CRUD, uploader — nem do gerador de QR do checkout. Sem
+ * essa divisão, o SDK do Firebase somado a tudo isso chegava num único pacote
+ * de quase 1 MB antes do primeiro produto aparecer.
+ */
+const Checkout = lazy(() =>
+  import('./components/checkout/Checkout').then((m) => ({ default: m.Checkout })),
+);
+const AdminPanel = lazy(() =>
+  import('./components/admin/AdminPanel').then((m) => ({ default: m.AdminPanel })),
+);
 
 type Route = 'loja' | 'checkout' | 'admin';
 
@@ -11,6 +25,14 @@ type Route = 'loja' | 'checkout' | 'admin';
 function routeFromHash(): Route {
   const hash = window.location.hash.replace('#/', '');
   return hash === 'admin' || hash === 'checkout' ? hash : 'loja';
+}
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <SkullMark className="h-12 w-12 animate-pulse text-iron" />
+    </div>
+  );
 }
 
 export function App() {
@@ -38,8 +60,13 @@ export function App() {
       {route === 'loja' && (
         <Storefront onOpenAdmin={() => go('admin')} onCheckout={() => go('checkout')} />
       )}
-      {route === 'checkout' && <Checkout onBack={() => go('loja')} />}
-      {route === 'admin' && <AdminPanel onExit={() => go('loja')} />}
+
+      {route !== 'loja' && (
+        <Suspense fallback={<RouteFallback />}>
+          {route === 'checkout' && <Checkout onBack={() => go('loja')} />}
+          {route === 'admin' && <AdminPanel onExit={() => go('loja')} />}
+        </Suspense>
+      )}
     </StoreProvider>
   );
 }

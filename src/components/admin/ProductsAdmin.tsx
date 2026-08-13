@@ -257,6 +257,7 @@ function ProductEditor({
 
             <div className="mt-4">
               <PhotoUploader
+                productId={draft.id}
                 photos={draft.photos}
                 onChange={(photos) => update({ photos })}
               />

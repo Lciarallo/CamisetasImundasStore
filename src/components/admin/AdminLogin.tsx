@@ -18,8 +18,7 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
     setBusy(true);
     setError('');
 
-    await new Promise((resolve) => window.setTimeout(resolve, 500));
-    const result = signIn(email, password);
+    const result = await signIn(email, password);
     if (!result.ok) setError(result.message);
     setBusy(false);
   };

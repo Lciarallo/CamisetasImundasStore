@@ -170,8 +170,8 @@ export function UsersAdmin() {
         <ConfirmDialog
           message={`Banir ${confirmDelete.name} do culto? A conta some do painel.`}
           onCancel={() => setConfirmDelete(null)}
-          onConfirm={() => {
-            const result = deleteUser(confirmDelete.id);
+          onConfirm={async () => {
+            const result = await deleteUser(confirmDelete.id);
             setNotice(result.message);
             setConfirmDelete(null);
           }}

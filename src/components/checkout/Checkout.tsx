@@ -11,7 +11,7 @@ import {
   QrCode,
   Truck,
 } from 'lucide-react';
-import type { Customer, Order, OrderLine, PaymentMethod, ShippingAddress } from '../../types';
+import type { Customer, Order, PaymentMethod, ShippingAddress } from '../../types';
 import {
   isValidCEP,
   isValidCPF,
@@ -182,49 +182,34 @@ export function Checkout({ onBack }: { onBack: () => void }) {
     // Latência simulada — o gateway real levaria mais ou menos isso.
     await new Promise((resolve) => window.setTimeout(resolve, 1400));
 
-    const lines: OrderLine[] = cart.flatMap((item) => {
-      const product = productById(item.productId);
-      if (!product) return [];
-      return [
-        {
-          productId: product.id,
-          name: product.name,
-          band: product.band,
-          art: product.art,
-          photo: product.photos[0],
-          size: item.size,
-          quantity: item.quantity,
-          unitPrice: product.price,
-          fulfillment: product.fulfillment,
-          productionDays: product.productionDays,
+    // O cliente manda só o que quer comprar e para onde enviar. Preço,
+    // desconto, frete, juros e total voltam recalculados do servidor — é o
+    // que impede um pedido forjado com total zerado.
+    let order: Order;
+    try {
+      order = await placeOrder({
+        customer,
+        address,
+        payment: {
+          method,
+          installments: method === 'cartao' ? card.installments : 1,
+          cardLast4: method === 'cartao' ? cardLast4(card.number) : undefined,
+          cardBrand: method === 'cartao' ? BRAND_LABEL[detectBrand(card.number)] : undefined,
         },
-      ];
-    });
-
-    const order = placeOrder({
-      // PIX e boleto só viram "pago" quando compensam; cartão aprova na hora.
-      status: method === 'cartao' ? 'pago' : 'aguardando-pagamento',
-      customer,
-      address,
-      lines,
-      subtotal: cartTotals.subtotal,
-      discount:
-        cartTotals.discount + (method === 'pix' ? cartTotals.total * PIX_DISCOUNT : 0),
-      shipping: cartTotals.shipping,
-      total: chargedTotal,
-      payment: {
-        method,
-        installments: method === 'cartao' ? card.installments : 1,
-        cardLast4: method === 'cartao' ? cardLast4(card.number) : undefined,
-        cardBrand: method === 'cartao' ? BRAND_LABEL[detectBrand(card.number)] : undefined,
-        pixCode: method === 'pix' ? pixPayload : undefined,
-      },
-      coupon: appliedCoupon?.code,
-    });
+        coupon: appliedCoupon?.code,
+      });
+    } catch (cause) {
+      // Cenário real agora: entre escolher e pagar, a última peça pode ter
+      // sido vendida. O servidor recusa e a mensagem dele é a que importa.
+      setProcessing(false);
+      setErrors({
+        pagamento:
+          cause instanceof Error ? cause.message : 'Não foi possível fechar o pedido.',
+      });
+      return;
+    }
 
     setPlacedOrder(order);
-    setProcessing(false);
-    setStep('confirmado');
     clearCart();
 
     // Cinzas caindo, não confete colorido — o tom da loja não comporta festa.

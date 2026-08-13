@@ -1,0 +1,93 @@
+rules_version = '2';
+
+/**
+ * Regras do Firestore — Camisetas Insanas.
+ *
+ * Princípio: negar por padrão e abrir o mínimo. Nada que envolva dinheiro é
+ * escrito pelo cliente. Pedido, estoque e privilégios só mudam através das
+ * Cloud Functions, que usam o Admin SDK e passam por cima destas regras — por
+ * isso aqui essas coleções aparecem como somente leitura.
+ *
+ * Os privilégios chegam em custom claims (`request.auth.token.perms`), não em
+ * documento: assim autorizar não custa uma leitura extra a cada regra.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    /** O usuário tem o privilégio pedido? */
+    function can(permission) {
+      return signedIn()
+        && request.auth.token.perms is list
+        && permission in request.auth.token.perms;
+    }
+
+    /** Conta desativada perde tudo, mesmo com claim antiga em cache. */
+    function activeStaff() {
+      return signedIn() && request.auth.token.active == true;
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Catálogo                                                         */
+    /* ---------------------------------------------------------------- */
+    match /products/{productId} {
+      // A vitrine é pública, mas só o que está ativo. Quem tem acesso ao
+      // painel enxerga também os rascunhos.
+      allow get, list: if resource.data.active == true || can('products.view');
+
+      // Escrita passa por Cloud Function, que valida o formato inteiro.
+      // Deixar o cliente gravar direto abriria margem para preço adulterado.
+      allow write: if false;
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Pedidos                                                          */
+    /* ---------------------------------------------------------------- */
+    match /orders/{orderId} {
+      allow get, list: if can('orders.view') && activeStaff();
+
+      // Criar pedido é exclusivo de `placeOrder`, que recalcula tudo no
+      // servidor. Se o cliente pudesse criar, poderia forjar o total.
+      allow write: if false;
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Cupons                                                           */
+    /* ---------------------------------------------------------------- */
+    match /coupons/{code} {
+      // A vitrine precisa ler para mostrar o desconto antes de fechar, mas o
+      // valor aplicado de verdade é recalculado no servidor.
+      allow get, list: if resource.data.active == true || can('products.view');
+      allow write: if false;
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Equipe                                                           */
+    /* ---------------------------------------------------------------- */
+    match /adminUsers/{uid} {
+      // Cada um enxerga o próprio perfil; a lista exige privilégio.
+      allow get: if can('users.view') || (signedIn() && request.auth.uid == uid);
+      allow list: if can('users.view') && activeStaff();
+
+      // Cargo e privilégios só mudam via função, que grava a custom claim
+      // junto — separar as duas coisas deixaria documento e token divergentes.
+      allow write: if false;
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Contadores e uso interno                                          */
+    /* ---------------------------------------------------------------- */
+    match /counters/{name} {
+      allow read: if can('dashboard.view');
+      allow write: if false;
+    }
+
+    // Qualquer coleção não declarada acima fica fechada.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

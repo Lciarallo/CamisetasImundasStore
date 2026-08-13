@@ -1,23 +1,36 @@
 /**
- * Preparo das fotos de produto antes de guardar.
+ * Preparo das fotos de produto antes de subir.
  *
- * Sem backend, as fotos vivem em `localStorage` como data URI — e a cota é de
- * poucos megabytes para o domínio inteiro. Uma foto de celular crua tem 3–8 MB
- * e, em base64, engorda mais 33%: duas fotos já estourariam tudo. Por isso
- * nada é guardado como veio: redimensiona, recomprime e mede antes de aceitar.
+ * Uma foto de celular crua tem 3–8 MB. Subir assim desperdiça banda de quem
+ * compra pelo 4G e, no modo local, estoura a cota do navegador na segunda
+ * foto. Nada é guardado como veio: redimensiona, recomprime e mede antes de
+ * aceitar. O destino final decide os limites (ver `STORAGE_LIMITS`).
  */
 
-/** Maior lado da imagem guardada. Suficiente para o modal em tela cheia. */
-const MAX_SIDE = 1000;
 const QUALITY = 0.82;
 
-/** Acima disso a foto é recusada: uma só já comprometeria a cota. */
-export const MAX_STORED_BYTES = 600_000;
+/**
+ * Os limites dependem de onde a foto vai parar.
+ *
+ * No Cloud Storage cabe bem mais: o teto é a regra do bucket (2 MB) e vale a
+ * pena guardar em resolução maior, porque a imagem é servida por CDN e não
+ * pesa em nenhuma leitura de documento. No modo local a foto vira data URI
+ * dentro do localStorage, onde a cota é de poucos megabytes para tudo.
+ */
+export const STORAGE_LIMITS = {
+  firebase: { maxSide: 1600, maxBytes: 1_800_000 },
+  local: { maxSide: 1000, maxBytes: 600_000 },
+} as const;
+
+export type StorageTarget = keyof typeof STORAGE_LIMITS;
 
 export const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/gif'];
 
 export interface PreparedImage {
+  /** Para prévia imediata e para o modo local, onde a foto é o próprio URI. */
   dataUrl: string;
+  /** Binário para subir ao Cloud Storage sem passar por base64. */
+  blob: Blob;
   width: number;
   height: number;
   /** Tamanho aproximado do data URI em bytes. */
@@ -73,7 +86,11 @@ export function dataUrlBytes(dataUrl: string): number {
   return Math.floor((base64.length * 3) / 4) - padding;
 }
 
-export async function prepareImage(file: File): Promise<PreparedImage> {
+export async function prepareImage(
+  file: File,
+  target: StorageTarget = 'local',
+): Promise<PreparedImage> {
+  const { maxSide: MAX_SIDE, maxBytes: MAX_STORED_BYTES } = STORAGE_LIMITS[target];
   if (!file.type.startsWith('image/')) {
     throw new ImageError('Esse arquivo não é uma imagem.');
   }
@@ -120,7 +137,17 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
     );
   }
 
-  return { dataUrl, width, height, bytes, format };
+  return { dataUrl, blob: dataUrlToBlob(dataUrl), width, height, bytes, format };
+}
+
+/** Converte o data URI já comprimido em binário, sem recomprimir de novo. */
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/data:([^;]+)/)?.[1] ?? 'image/webp';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
 }
 
 export function formatBytes(bytes: number): string {

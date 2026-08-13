@@ -25,3 +25,7 @@ dist-ssr
 
 # Firebase
 .firebase/
+
+# Ambiente local
+.env.local
+.env*.local

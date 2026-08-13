@@ -1,0 +1,33 @@
+rules_version = '2';
+
+/**
+ * Regras do Cloud Storage — fotos das peças.
+ *
+ * As fotos são públicas para leitura (é uma vitrine) e restritas na escrita a
+ * quem pode editar o catálogo. Tipo e tamanho são validados aqui também, não
+ * só no cliente: validação de cliente serve de conveniência, não de defesa.
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function can(permission) {
+      return request.auth != null
+        && request.auth.token.perms is list
+        && permission in request.auth.token.perms;
+    }
+
+    match /products/{productId}/{fileName} {
+      allow read: if true;
+
+      allow write: if can('products.edit')
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|avif)');
+
+      allow delete: if can('products.edit');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
