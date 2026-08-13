@@ -13,6 +13,25 @@ const SIGILS = [
 ];
 
 /**
+ * Só as fotos que já estão no nosso bucket entram — senão o catálogo viraria
+ * vetor para embutir imagem de terceiro, ou pior, um rastreador.
+ *
+ * O emulador serve as fotos em `127.0.0.1:9199`, endereço que a regra de
+ * produção recusa. Sem a exceção abaixo, o caminho foto→peça simplesmente não
+ * era testável fora da nuvem — a foto subia e sumia na hora de salvar. A
+ * variável `FUNCTIONS_EMULATOR` é posta pelo próprio emulador e nunca existe
+ * numa função publicada, então a brecha não viaja junto no deploy.
+ */
+function isOurBucket(url: string): boolean {
+  if (url.startsWith('https://firebasestorage.googleapis.com/')) return true;
+
+  if (process.env.FUNCTIONS_EMULATOR === 'true') {
+    return /^http:\/\/(127\.0\.0\.1|localhost):\d+\/v0\/b\//.test(url);
+  }
+  return false;
+}
+
+/**
  * Normaliza e valida a peça antes de gravar.
  *
  * Aceitar o objeto do jeito que veio deixaria o cliente inventar campo, mandar
@@ -75,11 +94,9 @@ export function sanitizeProduct(raw: unknown): ProductDoc {
   const productionDays =
     fulfillment === 'sob-encomenda' ? Math.min(180, Math.max(1, Number(data?.productionDays) || 10)) : null;
 
-  // Só as fotos que já estão no nosso bucket entram — senão o catálogo viraria
-  // vetor para embutir imagem de terceiro (ou pior, um rastreador).
   const photos = (Array.isArray(data?.photos) ? data.photos : [])
     .filter((url): url is string => typeof url === 'string')
-    .filter((url) => url.startsWith('https://firebasestorage.googleapis.com/'))
+    .filter(isOurBucket)
     .slice(0, 4);
 
   return {

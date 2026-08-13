@@ -18,8 +18,41 @@ export const saveProduct = onCall({ region: REGION }, async (request) => {
   const clean = sanitizeProduct(product);
   await getFirestore().collection('products').doc(id).set(clean);
 
+  await removeOrphanPhotos(id, clean.photos);
+
   return { id, product: clean };
 });
+
+/**
+ * Apaga do bucket as fotos que a peça deixou de referenciar.
+ *
+ * Sem isso, tirar uma foto da peça só some com o link: o arquivo fica no
+ * Storage para sempre, sem nada apontando para ele, ocupando cota e custando
+ * dinheiro. E a limpeza precisa ser **aqui**, depois de gravar — apagar no
+ * clique de remover deixaria a peça com link quebrado se o editor fechasse
+ * sem salvar.
+ */
+async function removeOrphanPhotos(productId: string, keep: string[]): Promise<void> {
+  // Só o nome do arquivo interessa; a URL de download traz o caminho escapado
+  // e um token de acesso na query.
+  const nomes = new Set(
+    keep
+      .map((url) => decodeURIComponent(url.split('?')[0]).split('/').pop())
+      .filter((name): name is string => Boolean(name)),
+  );
+
+  try {
+    const [files] = await getStorage().bucket().getFiles({ prefix: `products/${productId}/` });
+    await Promise.all(
+      files
+        .filter((file) => !nomes.has(file.name.split('/').pop()!))
+        .map((file) => file.delete()),
+    );
+  } catch {
+    // A peça já foi salva; falhar aqui não pode desfazer isso. No pior caso
+    // sobra um arquivo órfão, que a exclusão da peça leva junto depois.
+  }
+}
 
 export const deleteProduct = onCall({ region: REGION }, async (request) => {
   requirePermission(request, 'products.edit');

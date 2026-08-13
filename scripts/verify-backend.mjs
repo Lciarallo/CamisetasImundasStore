@@ -609,6 +609,36 @@ async function main() {
     `veio ${outsideProducts}`,
   );
 
+  // Duas fotos na peça, depois só uma: a outra tem de sumir do bucket.
+  const segunda = await uploadBytes(storageRef(bucket, 'products/p-normal/verso.png'), pixel, {
+    contentType: 'image/png',
+  });
+  const urlSegunda = await getDownloadURL(segunda.ref);
+
+  await call('saveProduct')({
+    id: 'p-normal',
+    product: product({ name: 'Peça normal', price: 149.9, photos: [url, urlSegunda] }),
+  });
+  const comDuas = await getDoc(doc(db, 'products', 'p-normal'));
+  check('as duas fotos ficam gravadas na peça', comDuas.data()?.photos?.length === 2, `${comDuas.data()?.photos?.length}`);
+
+  await call('saveProduct')({
+    id: 'p-normal',
+    product: product({ name: 'Peça normal', price: 149.9, photos: [url] }),
+  });
+  const comUma = await getDoc(doc(db, 'products', 'p-normal'));
+  check('remover a foto atualiza a peça', comUma.data()?.photos?.length === 1);
+
+  const orfa = await denied(getDownloadURL(storageRef(bucket, 'products/p-normal/verso.png')));
+  check(
+    'a foto removida some do bucket, sem deixar órfã',
+    orfa === 'storage/object-not-found',
+    `veio ${orfa}`,
+  );
+
+  const capaViva = await denied(getDownloadURL(storageRef(bucket, 'products/p-normal/capa.png')));
+  check('a foto que ficou continua no bucket', capaViva === null);
+
   await signOut(auth);
   const anonUpload = await denied(
     uploadBytes(storageRef(bucket, 'products/p-normal/invasor.png'), pixel, {
