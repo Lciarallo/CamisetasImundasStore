@@ -28,7 +28,13 @@ const STEPS: { status: OrderStatus; label: string }[] = [
 
 export function CustomerPortal({ onClose }: { onClose: () => void }) {
   const { lookupOrders } = useStore();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => {
+    try {
+      return localStorage.getItem('insanas_customer_email') || '';
+    } catch {
+      return '';
+    }
+  });
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [searched, setSearched] = useState(false);

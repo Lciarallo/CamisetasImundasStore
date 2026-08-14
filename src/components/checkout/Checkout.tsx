@@ -57,8 +57,24 @@ export function Checkout({ onBack }: { onBack: () => void }) {
     useStore();
 
   const [step, setStep] = useState<Step>('identificacao');
-  const [customer, setCustomer] = useState<Customer>(EMPTY_CUSTOMER);
-  const [address, setAddress] = useState<ShippingAddress>(EMPTY_ADDRESS);
+  const [customer, setCustomer] = useState<Customer>(() => {
+    try {
+      const saved = localStorage.getItem('insanas_saved_customer');
+      if (saved) return JSON.parse(saved) as Customer;
+    } catch {
+      // ignore
+    }
+    return EMPTY_CUSTOMER;
+  });
+  const [address, setAddress] = useState<ShippingAddress>(() => {
+    try {
+      const saved = localStorage.getItem('insanas_saved_address');
+      if (saved) return JSON.parse(saved) as ShippingAddress;
+    } catch {
+      // ignore
+    }
+    return EMPTY_ADDRESS;
+  });
   const [method, setMethod] = useState<PaymentMethod>('pix');
   const [card, setCard] = useState<CardState>(EMPTY_CARD);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -231,6 +247,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 
     setPlacedOrder(order);
     try {
+      localStorage.setItem('insanas_saved_customer', JSON.stringify(customer));
+      localStorage.setItem('insanas_saved_address', JSON.stringify(address));
+      localStorage.setItem('insanas_customer_email', customer.email);
+
       const stored = localStorage.getItem('insanas_customer_orders');
       const list = stored ? (JSON.parse(stored) as string[]) : [];
       if (!list.includes(order.id)) {
