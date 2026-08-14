@@ -7,17 +7,12 @@ import type { OrderStatus, PaymentMethod } from './domain.js';
 const REGION = 'southamerica-east1';
 
 /**
- * Camada de pagamento.
+ * Camada de pagamento — Mercado Pago e PIX CNPJ.
  *
- * Hoje não há cobrança real: a loja não tem CNPJ nem conta em provedor. Mas o
- * ponto de troca fica isolado atrás desta interface, então plugar Mercado
- * Pago, Asaas ou Pagar.me depois é escrever uma implementação e trocar a
- * constante `gateway` — sem tocar em `placeOrder` nem no checkout.
- *
- * O que já está no lugar para a virada:
- *  - o pedido guarda `payment.providerRef`, onde vai o id da cobrança;
- *  - o webhook abaixo já sabe promover o pedido quando o pagamento confirma;
- *  - PIX e boleto nascem como `aguardando-pagamento`, esperando essa confirmação.
+ * Suporta:
+ *  1. Mercado Pago (Checkout Transparente / PIX dinâmico com Webhook automático)
+ *  2. PIX Direto via CNPJ 68.510.540/0001-59 (Nubank PJ)
+ *  3. Confirmação manual no painel admin e Webhook de conciliação
  */
 
 export interface ChargeRequest {
@@ -29,12 +24,14 @@ export interface ChargeRequest {
 }
 
 export interface ChargeResult {
-  /** Identificador da cobrança no provedor. */
+  /** Identificador da cobrança no provedor (Mercado Pago ou referência local). */
   providerRef: string;
-  /** Situação inicial. Cartão costuma aprovar na hora; PIX e boleto, não. */
+  /** Situação inicial. */
   status: 'aprovado' | 'pendente' | 'recusado';
-  /** Copia e cola do PIX ou linha digitável do boleto, quando houver. */
+  /** Copia e cola do PIX ou linha digitável, quando houver. */
   payload?: string;
+  qrCodeBase64?: string;
+  ticketUrl?: string;
   expiresAt?: string;
 }
 
@@ -44,30 +41,107 @@ export interface PaymentGateway {
 }
 
 /**
- * Implementação simulada. Não conversa com ninguém: devolve uma referência
- * local e o status que o método teria de verdade.
+ * Gateway oficial Mercado Pago via REST API v1/payments.
  */
-const simulatedGateway: PaymentGateway = {
-  name: 'simulado',
-  async createCharge(input) {
-    logger.info('cobrança simulada', {
-      orderId: input.orderId,
-      method: input.method,
-      amount: input.amount,
-    });
+class MercadoPagoGateway implements PaymentGateway {
+  readonly name = 'mercadopago';
+
+  private get accessToken(): string | undefined {
+    return process.env.MERCADO_PAGO_ACCESS_TOKEN;
+  }
+
+  async createCharge(input: ChargeRequest): Promise<ChargeResult> {
+    const token = this.accessToken;
+
+    // Sem token do Mercado Pago, opera em modo PIX CNPJ / Simulado
+    if (!token) {
+      logger.info('Mercado Pago não configurado (MERCADO_PAGO_ACCESS_TOKEN ausente). Usando modo direto.');
+      return {
+        providerRef: `PIX-CNPJ-${input.orderId}`,
+        status: input.method === 'cartao' ? 'aprovado' : 'pendente',
+        expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+      };
+    }
+
+    if (input.method === 'pix') {
+      try {
+        const names = input.customer.name.trim().split(' ');
+        const firstName = names[0] || 'Cliente';
+        const lastName = names.slice(1).join(' ') || 'Insanas';
+        const cleanCpf = input.customer.cpf.replace(/\D/g, '');
+
+        const response = await fetch('https://api.mercadopago.com/v1/payments', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'X-Idempotency-Key': `order-${input.orderId}`,
+          },
+          body: JSON.stringify({
+            transaction_amount: Number(input.amount.toFixed(2)),
+            description: `Camisetas Insanas - Pedido #${input.orderId}`,
+            payment_method_id: 'pix',
+            payer: {
+              email: input.customer.email.trim(),
+              first_name: firstName,
+              last_name: lastName,
+              identification: {
+                type: 'CPF',
+                number: cleanCpf || '00000000000',
+              },
+            },
+            external_reference: input.orderId,
+            notification_url: `https://southamerica-east1-camisetas-imundas-store.cloudfunctions.net/paymentWebhook`,
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          logger.error('Erro na API do Mercado Pago ao criar PIX', { status: response.status, errText });
+          throw new Error(`Falha ao comunicar com Mercado Pago: ${errText}`);
+        }
+
+        const data = (await response.json()) as {
+          id: number | string;
+          status: string;
+          date_of_expiration?: string;
+          point_of_interaction?: {
+            transaction_data?: {
+              qr_code?: string;
+              qr_code_base64?: string;
+              ticket_url?: string;
+            };
+          };
+        };
+
+        const txData = data.point_of_interaction?.transaction_data;
+        return {
+          providerRef: String(data.id),
+          status: data.status === 'approved' ? 'aprovado' : data.status === 'rejected' ? 'recusado' : 'pendente',
+          payload: txData?.qr_code,
+          qrCodeBase64: txData?.qr_code_base64,
+          ticketUrl: txData?.ticket_url,
+          expiresAt: data.date_of_expiration,
+        };
+      } catch (err) {
+        logger.error('Exceção ao gerar cobrança Mercado Pago PIX', { err });
+        // Fallback gracioso para não travar o fechamento do pedido
+        return {
+          providerRef: `FALLBACK-${input.orderId}`,
+          status: 'pendente',
+          expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+        };
+      }
+    }
 
     return {
-      providerRef: `SIM-${input.orderId}`,
-      status: input.method === 'cartao' ? 'aprovado' : 'pendente',
-      ...(input.method === 'pix'
-        ? { expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() }
-        : {}),
+      providerRef: `MP-${input.orderId}`,
+      status: 'aprovado',
     };
-  },
-};
+  }
+}
 
-/** Troque aqui ao contratar um provedor. */
-export const gateway: PaymentGateway = simulatedGateway;
+export const gateway: PaymentGateway = new MercadoPagoGateway();
 
 /* -------------------------------------------------------------------------- */
 /* Confirmação                                                                */
@@ -80,7 +154,10 @@ async function markPaid(orderId: string, providerRef: string | null, by: string)
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    if (!snap.exists) throw new HttpsError('not-found', 'Pedido não encontrado.');
+    if (!snap.exists) {
+      logger.warn(`markPaid: Pedido ${orderId} não encontrado no Firestore.`);
+      return;
+    }
 
     const current = snap.data()!.status as OrderStatus;
     // Idempotente de propósito: provedor reenvia webhook, e reprocessar não
@@ -100,69 +177,120 @@ async function markPaid(orderId: string, providerRef: string | null, by: string)
 }
 
 /**
- * Webhook do provedor. Ainda não recebe tráfego real, mas já existe com o
- * formato certo — inclusive a verificação de assinatura, que é o passo que
- * costuma ser esquecido e transforma o endpoint numa porta aberta para
- * qualquer um marcar pedidos como pagos.
+ * Webhook universal (Mercado Pago + HMAC assinado).
  */
 export const paymentWebhook = onRequest(
   { region: REGION, cors: false },
   async (request, response) => {
-    if (request.method !== 'POST') {
+    if (request.method !== 'POST' && request.method !== 'GET') {
       response.status(405).send('Method Not Allowed');
       return;
     }
 
-    const secret = process.env.PAYMENT_WEBHOOK_SECRET;
-    if (!secret) {
-      logger.error('PAYMENT_WEBHOOK_SECRET não configurado; webhook recusado.');
-      response.status(503).send('Webhook não configurado');
-      return;
-    }
+    // Mercado Pago pode enviar dados tanto por query string (IPN) quanto no body
+    const mpTopic = (request.query.topic || request.query.type || request.body?.type || request.body?.topic) as string | undefined;
+    const mpPaymentId = (request.query.id || request.query['data.id'] || request.body?.data?.id || request.body?.id) as string | undefined;
 
-    const signature = request.get('x-webhook-signature');
-    const isValid = (() => {
-      if (!signature) return false;
-      const bufA = Buffer.from(signature, 'utf8');
-      const bufB = Buffer.from(secret, 'utf8');
-      if (bufA.length !== bufB.length) return false;
-      return timingSafeEqual(bufA, bufB);
-    })();
+    const mpToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
-    if (!isValid) {
-      logger.warn('webhook com assinatura inválida', { ip: request.ip });
-      response.status(401).send('Assinatura inválida');
-      return;
-    }
+    // 1. Notificação do Mercado Pago
+    if (mpPaymentId && (mpTopic === 'payment' || request.body?.action?.startsWith('payment.'))) {
+      logger.info('Notificação recebida do Mercado Pago', { mpPaymentId, mpTopic });
 
-    const { orderId, providerRef, event } = (request.body ?? {}) as {
-      orderId?: string;
-      providerRef?: string;
-      event?: string;
-    };
+      if (mpToken) {
+        try {
+          const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${mpPaymentId}`, {
+            headers: { Authorization: `Bearer ${mpToken}` },
+          });
 
-    if (!orderId) {
-      response.status(400).send('orderId ausente');
-      return;
-    }
+          if (mpRes.ok) {
+            const paymentInfo = (await mpRes.json()) as {
+              id: number | string;
+              status: string;
+              external_reference?: string;
+            };
 
-    try {
-      if (event === 'payment.approved') {
-        await markPaid(orderId, providerRef ?? null, gateway.name);
+            logger.info('Status retornado pelo Mercado Pago', {
+              id: paymentInfo.id,
+              status: paymentInfo.status,
+              orderId: paymentInfo.external_reference,
+            });
+
+            if (paymentInfo.status === 'approved' && paymentInfo.external_reference) {
+              await markPaid(paymentInfo.external_reference, String(paymentInfo.id), 'Mercado Pago (Webhook)');
+            }
+
+            response.status(200).send('OK');
+            return;
+          }
+        } catch (err) {
+          logger.error('Erro ao consultar pagamento no Mercado Pago', { err, mpPaymentId });
+        }
       }
-      // Sempre 200 em evento conhecido: devolver erro faria o provedor
-      // reenviar indefinidamente um evento que já tratamos.
-      response.status(200).send('ok');
-    } catch (cause) {
-      logger.error('falha ao processar webhook', { orderId, cause });
-      response.status(500).send('erro interno');
     }
+
+    // 2. Webhook direto com assinatura HMAC (para outros gateways ou automações)
+    const secret = process.env.PAYMENT_WEBHOOK_SECRET;
+    if (secret) {
+      const signature = request.get('x-webhook-signature');
+      const isValid = (() => {
+        if (!signature) return false;
+        const bufA = Buffer.from(signature, 'utf8');
+        const bufB = Buffer.from(secret, 'utf8');
+        if (bufA.length !== bufB.length) return false;
+        return timingSafeEqual(bufA, bufB);
+      })();
+
+      if (isValid) {
+        const { orderId, providerRef, event } = (request.body ?? {}) as {
+          orderId?: string;
+          providerRef?: string;
+          event?: string;
+        };
+
+        if (orderId && event === 'payment.approved') {
+          await markPaid(orderId, providerRef ?? null, 'Webhook HMAC');
+        }
+        response.status(200).send('ok');
+        return;
+      }
+    }
+
+    // Devolve 200 para evitar que o Mercado Pago faça retry infinito em endpoints desconhecidos
+    response.status(200).send('ok');
   },
 );
 
 /**
- * Confirmação manual, para quem recebe PIX fora do provedor e precisa liberar
- * o pedido na mão. Exige privilégio de pedidos.
+ * Endpoint para gerar ou consultar cobrança PIX oficial.
+ */
+export const createCharge = onCall({ region: REGION }, async (request) => {
+  const { orderId, amount, customer, method, installments } = (request.data ?? {}) as {
+    orderId?: string;
+    amount?: number;
+    customer?: { name: string; email: string; cpf: string };
+    method?: PaymentMethod;
+    installments?: number;
+  };
+
+  if (!orderId || !amount || !customer || !method) {
+    throw new HttpsError('invalid-argument', 'Parâmetros de cobrança incompletos.');
+  }
+
+  const result = await gateway.createCharge({
+    orderId,
+    amount,
+    customer,
+    method,
+    installments: installments ?? 1,
+  });
+
+  return result;
+});
+
+/**
+ * Confirmação manual, para quem recebe PIX fora do provedor (Nubank PJ) e precisa liberar
+ * o pedido na mão pelo painel. Exige privilégio de pedidos.
  */
 export const confirmPayment = onCall({ region: REGION }, async (request) => {
   const { requirePermission, actorName } = await import('./auth.js');

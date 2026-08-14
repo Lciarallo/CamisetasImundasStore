@@ -67,6 +67,10 @@ export function PixPanel({ payload, amount }: { payload: string; amount: number 
             <li>2. Aponte para o QR Code ou use o Copia e Cola</li>
             <li>3. A confirmação é imediata e o pedido entra em separação</li>
           </ol>
+
+          <p className="border-t border-smoke/70 pt-2 text-[0.62rem] text-dust">
+            Beneficiário: <strong className="text-bone">LUIZ EDUARDO CIARALLO</strong> · CNPJ: <span className="font-mono text-parchment">68.510.540/0001-59</span>
+          </p>
         </div>
       </div>
 

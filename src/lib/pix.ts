@@ -80,9 +80,9 @@ export function buildPixPayload({
   return payload + crc16(payload);
 }
 
-/** Dados do recebedor da loja. Trocar pela chave real do lojista. */
+/** Dados oficiais do recebedor da loja (CNPJ 68.510.540/0001-59). */
 export const INSANAS_PIX = {
-  key: 'pagamentos@camisetasinsanas.com.br',
-  merchantName: 'CAMISETAS INSANAS',
-  merchantCity: 'SAO PAULO',
+  key: '68510540000159',
+  merchantName: 'LUIZ EDUARDO CIARALLO',
+  merchantCity: 'BRASILIA',
 } as const;

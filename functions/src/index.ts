@@ -20,4 +20,4 @@ export { placeOrder, updateOrderStatus, setTrackingCode } from './orders.js';
 export { saveProduct, deleteProduct, setStock } from './catalog.js';
 export { saveStaff, deleteStaff, registerLogin } from './staff.js';
 export { bootstrap, seedCatalog } from './bootstrap.js';
-export { paymentWebhook, confirmPayment } from './payments.js';
+export { paymentWebhook, confirmPayment, createCharge } from './payments.js';
