@@ -248,6 +248,20 @@ export function useLocalBackend(): StoreValue {
     [setOrders],
   );
 
+  const lookupOrders = useCallback(
+    async (query: string): Promise<Order[]> => {
+      const q = query.trim().toLowerCase();
+      const cleanCpf = query.replace(/\D/g, '');
+      return orders.filter((order) => {
+        if (order.id.toLowerCase() === q) return true;
+        if (order.customer.email.toLowerCase() === q) return true;
+        if (order.customer.cpf.replace(/\D/g, '') === cleanCpf && cleanCpf.length > 5) return true;
+        return false;
+      });
+    },
+    [orders],
+  );
+
   /* ---------------------------------------------------------------------- */
   /* Catálogo                                                                */
   /* ---------------------------------------------------------------------- */
@@ -408,6 +422,7 @@ export function useLocalBackend(): StoreValue {
     placeOrder,
     updateOrderStatus,
     setTrackingCode,
+    lookupOrders,
     saveProduct,
     deleteProduct,
     adjustStock,

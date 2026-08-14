@@ -78,6 +78,7 @@ export interface StoreValue {
   placeOrder: (draft: OrderDraft) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<Result>;
   setTrackingCode: (orderId: string, code: string) => Promise<Result>;
+  lookupOrders: (query: string) => Promise<Order[]>;
 
   saveProduct: (product: Product) => Promise<Result>;
   deleteProduct: (productId: string) => Promise<Result>;

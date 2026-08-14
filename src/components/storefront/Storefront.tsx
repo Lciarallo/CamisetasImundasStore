@@ -15,6 +15,9 @@ const ProductModal = lazy(() =>
 const CartDrawer = lazy(() =>
   import('./CartDrawer').then((m) => ({ default: m.CartDrawer })),
 );
+const CustomerPortal = lazy(() =>
+  import('./CustomerPortal').then((m) => ({ default: m.CustomerPortal })),
+);
 
 type SortKey = 'destaques' | 'preco-asc' | 'preco-desc' | 'nota' | 'novidades';
 
@@ -41,6 +44,7 @@ export function Storefront({
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [selected, setSelected] = useState<Product | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
+  const [portalOpen, setPortalOpen] = useState(false);
 
   const visible = useMemo(() => {
     const term = normalize(search);
@@ -100,6 +104,7 @@ export function Storefront({
         onCategory={setCategory}
         onOpenCart={() => setCartOpen(true)}
         onOpenAdmin={onOpenAdmin}
+        onOpenCustomerPortal={() => setPortalOpen(true)}
       />
 
       <Hero onExplore={scrollToCatalog} />
@@ -153,27 +158,15 @@ export function Storefront({
           </div>
         </div>
 
+        {/* Grade */}
         {visible.length === 0 ? (
-          <div className="panel flex flex-col items-center gap-4 px-6 py-24 text-center">
-            <SkullMark className="h-14 w-14 text-iron" />
-            <p className="heading-carved text-xs text-parchment">Nada foi exumado</p>
-            <p className="max-w-sm text-[0.75rem] text-grave">
-              Nenhuma peça corresponde a esses filtros. Tente outro termo ou volte ao acervo
-              completo.
-            </p>
-            <button
-              onClick={() => {
-                setSearch('');
-                setCategory('Todos');
-                setOnlyAvailable(false);
-              }}
-              className="btn btn-ghost mt-1"
-            >
-              Limpar filtros
-            </button>
+          <div className="py-20 text-center text-grave">
+            <SkullMark className="mx-auto h-12 w-12 text-dust opacity-30" />
+            <p className="heading-carved mt-4 text-xs text-bone">Nenhuma peça encontrada</p>
+            <p className="mt-1 text-xs text-dust">Tente outro termo ou limpe os filtros.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
             {visible.map((product) => (
               <ProductCard
                 key={product.id}
@@ -186,7 +179,7 @@ export function Storefront({
         )}
       </main>
 
-      <Footer />
+      <Footer onOpenCustomerPortal={() => setPortalOpen(true)} />
 
       <Suspense fallback={null}>
         {selected && (
@@ -207,6 +200,8 @@ export function Storefront({
             }}
           />
         )}
+
+        {portalOpen && <CustomerPortal onClose={() => setPortalOpen(false)} />}
       </Suspense>
     </div>
   );

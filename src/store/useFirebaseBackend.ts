@@ -363,6 +363,18 @@ export function useFirebaseBackend(): StoreValue {
     [],
   );
 
+  const lookupOrders = useCallback(
+    async (query: string): Promise<Order[]> => {
+      try {
+        const res = (await call('lookupOrders', { query })) as { orders?: Order[] };
+        return Array.isArray(res?.orders) ? res.orders : [];
+      } catch {
+        return [];
+      }
+    },
+    [],
+  );
+
   const saveProduct = useCallback(
     (product: Product) =>
       attempt(() => {
@@ -526,6 +538,7 @@ export function useFirebaseBackend(): StoreValue {
     placeOrder,
     updateOrderStatus,
     setTrackingCode,
+    lookupOrders,
     saveProduct,
     deleteProduct,
     adjustStock,

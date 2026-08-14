@@ -229,10 +229,17 @@ export function Checkout({ onBack }: { onBack: () => void }) {
       return;
     }
 
-    // A ordem importa: `clearCart()` esvazia o carrinho, e sem trocar o passo
-    // antes disso a tela cai na guarda de "sacola vazia" — o cliente pagaria e
-    // veria a sacola vazia em vez do número do pedido.
     setPlacedOrder(order);
+    try {
+      const stored = localStorage.getItem('insanas_customer_orders');
+      const list = stored ? (JSON.parse(stored) as string[]) : [];
+      if (!list.includes(order.id)) {
+        list.unshift(order.id);
+        localStorage.setItem('insanas_customer_orders', JSON.stringify(list));
+      }
+    } catch {
+      // ignore
+    }
     setStep('confirmado');
     clearCart();
 

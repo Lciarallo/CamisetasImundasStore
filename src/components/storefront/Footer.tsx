@@ -16,7 +16,7 @@ const COLUMNS: { title: string; links: string[] }[] = [
   },
 ];
 
-export function Footer() {
+export function Footer({ onOpenCustomerPortal }: { onOpenCustomerPortal?: () => void }) {
   return (
     <footer className="mt-auto border-t border-smoke bg-pitch">
       {/* Garantias */}
@@ -112,12 +112,21 @@ export function Footer() {
             <ul className="mt-4 space-y-2.5">
               {column.links.map((link) => (
                 <li key={link}>
-                  <a
-                    href="#catalogo"
-                    className="text-[0.75rem] text-grave transition-colors hover:text-blood-bright"
-                  >
-                    {link}
-                  </a>
+                  {link === 'Rastrear pedido' && onOpenCustomerPortal ? (
+                    <button
+                      onClick={onOpenCustomerPortal}
+                      className="text-[0.75rem] text-grave transition-colors hover:text-blood-bright"
+                    >
+                      {link}
+                    </button>
+                  ) : (
+                    <a
+                      href="#catalogo"
+                      className="text-[0.75rem] text-grave transition-colors hover:text-blood-bright"
+                    >
+                      {link}
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
@@ -127,7 +136,7 @@ export function Footer() {
 
       <div className="border-t border-smoke">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-[0.68rem] text-grave md:flex-row md:px-8">
-          <p>© 2026 Camisetas Insanas · CNPJ 00.000.000/0001-00 · Projeto fictício</p>
+          <p>© 2026 Camisetas Insanas · CNPJ 68.510.540/0001-59</p>
           <p className="flex items-center gap-3 text-grave">
             <span>PIX</span>
             <span>·</span>

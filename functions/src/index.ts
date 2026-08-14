@@ -16,7 +16,7 @@ setGlobalOptions({
   maxInstances: 10,
 });
 
-export { placeOrder, updateOrderStatus, setTrackingCode } from './orders.js';
+export { placeOrder, updateOrderStatus, setTrackingCode, lookupOrders } from './orders.js';
 export { saveProduct, deleteProduct, setStock } from './catalog.js';
 export { saveStaff, deleteStaff, registerLogin } from './staff.js';
 export { bootstrap, seedCatalog } from './bootstrap.js';

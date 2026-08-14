@@ -401,3 +401,49 @@ export const setTrackingCode = onCall({ region: 'southamerica-east1' }, async (r
 
   return { ok: true };
 });
+
+/**
+ * Consulta de pedidos do cliente por E-mail, CPF ou Número do Pedido (sem senha).
+ */
+export const lookupOrders = onCall({ region: 'southamerica-east1' }, async (request) => {
+  const { query, orderId } = (request.data ?? {}) as { query?: string; orderId?: string };
+  const db = getFirestore();
+
+  if (orderId && typeof orderId === 'string' && orderId.trim()) {
+    const snap = await db.collection('orders').doc(orderId.trim().toUpperCase()).get();
+    if (!snap.exists) return { orders: [] };
+    return { orders: [snap.data()] };
+  }
+
+  if (!query || typeof query !== 'string' || query.trim().length < 3) {
+    throw new HttpsError('invalid-argument', 'Informe seu e-mail, CPF ou número do pedido.');
+  }
+
+  const raw = query.trim();
+  const clean = raw.toLowerCase();
+  const cleanCpf = raw.replace(/\D/g, '');
+
+  let list: any[] = [];
+
+  if (clean.includes('@')) {
+    const snap = await db.collection('orders').where('customer.email', '==', clean).limit(10).get();
+    list = snap.docs.map((doc) => doc.data());
+  } else if (cleanCpf.length === 11) {
+    const snap1 = await db.collection('orders').where('customer.cpf', '==', raw).limit(10).get();
+    if (!snap1.empty) {
+      list = snap1.docs.map((doc) => doc.data());
+    } else {
+      const snap2 = await db.collection('orders').where('customer.cpf', '==', cleanCpf).limit(10).get();
+      list = snap2.docs.map((doc) => doc.data());
+    }
+  } else {
+    const snap = await db.collection('orders').doc(raw.toUpperCase()).get();
+    if (snap.exists) {
+      list = [snap.data()];
+    }
+  }
+
+  list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return { orders: list };
+});
+

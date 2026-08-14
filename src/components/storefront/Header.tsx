@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Menu, Search, ShieldHalf, ShoppingBag, X } from 'lucide-react';
+import { Menu, Package, Search, ShieldHalf, ShoppingBag, X } from 'lucide-react';
 import { CATEGORIES, type Category } from '../../types';
 import { BrandLogo } from '../art/BrandLogo';
 
@@ -11,6 +11,7 @@ interface HeaderProps {
   onCategory: (value: Category | 'Todos') => void;
   onOpenCart: () => void;
   onOpenAdmin: () => void;
+  onOpenCustomerPortal: () => void;
 }
 
 export function Header({
@@ -21,6 +22,7 @@ export function Header({
   onCategory,
   onOpenCart,
   onOpenAdmin,
+  onOpenCustomerPortal,
 }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -80,6 +82,16 @@ export function Header({
         </div>
 
         <div className="ml-auto flex items-center gap-1 md:ml-0">
+          <button
+            onClick={onOpenCustomerPortal}
+            className="flex items-center gap-1.5 px-3 py-2 text-parchment transition-colors hover:text-bone"
+            title="Meus Pedidos e Rastreio"
+            aria-label="Meus Pedidos e Rastreamento"
+          >
+            <Package className="h-5 w-5 text-blood-bright" />
+            <span className="heading-carved hidden text-[0.6rem] sm:inline">Meus Pedidos</span>
+          </button>
+
           <button
             onClick={onOpenAdmin}
             className="flex items-center gap-2 px-3 py-2 text-grave transition-colors hover:text-bone"
