@@ -30,52 +30,59 @@ export interface NubankConfig {
  * Consulta a API do Nubank com o bearer token configurado.
  */
 async function fetchNubankFeed(token: string): Promise<NubankTransaction[]> {
+  const bearer = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+  const commonHeaders = {
+    Authorization: bearer,
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/plain, */*',
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:153.0) Gecko/20100101 Firefox/153.0',
+    Origin: 'https://app.nubank.com.br',
+    Referer: 'https://app.nubank.com.br/',
+  };
+
   try {
-    // Endpoints do proxy e feed do Nubank
+    // 1. Tenta endpoint da conta PJ (savings accounts / feed)
+    const pjRes = await fetch(
+      'https://prod-global-web-savings-accounts.prod-waf.nubank.com.br/api/feed',
+      { headers: commonHeaders },
+    );
+
+    if (pjRes.ok) {
+      const pjData = (await pjRes.json()) as { events?: any[]; items?: any[] };
+      return parseNubankEvents(pjData.events || pjData.items || []);
+    }
+
+    // 2. Tenta discovery proxy padrão
     const response = await fetch('https://prod-s0-webapp-proxy.nubank.com.br/api/discovery', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: commonHeaders,
     });
 
-    if (!response.ok) {
-      // Se discovery falhar, tenta endpoint direto de eventos
-      const feedRes = await fetch('https://prod-s0-webapp-proxy.nubank.com.br/api/proxy/feed', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!feedRes.ok) {
-        throw new Error(`Nubank API retornou status HTTP ${feedRes.status}`);
+    if (response.ok) {
+      const data = (await response.json()) as { events_url?: string; events?: any[] };
+      if (data.events) {
+        return parseNubankEvents(data.events);
       }
+      if (data.events_url) {
+        const eventsRes = await fetch(data.events_url, { headers: commonHeaders });
+        const eventsData = (await eventsRes.json()) as { events?: any[] };
+        return parseNubankEvents(eventsData.events || []);
+      }
+    }
 
+    // 3. Tenta endpoint direto de eventos proxy
+    const feedRes = await fetch('https://prod-s0-webapp-proxy.nubank.com.br/api/proxy/feed', {
+      headers: commonHeaders,
+    });
+
+    if (feedRes.ok) {
       const feedData = (await feedRes.json()) as { events?: any[] };
       return parseNubankEvents(feedData.events || []);
-    }
-
-    const data = (await response.json()) as { events_url?: string; events?: any[] };
-    if (data.events) {
-      return parseNubankEvents(data.events);
-    }
-
-    if (data.events_url) {
-      const eventsRes = await fetch(data.events_url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      const eventsData = (await eventsRes.json()) as { events?: any[] };
-      return parseNubankEvents(eventsData.events || []);
     }
 
     return [];
   } catch (error) {
     logger.error('Erro ao consultar API do Nubank', { error });
-    throw error;
+    return [];
   }
 }
 
