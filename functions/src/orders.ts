@@ -409,17 +409,64 @@ export const setTrackingCode = onCall({ region: 'southamerica-east1' }, async (r
   return { ok: true };
 });
 
+function maskPII(order: any, isStaff: boolean): any {
+  if (isStaff || !order) return order;
+
+  const rawCpf = String(order.customer?.cpf || '').replace(/\D/g, '');
+  const maskedCpf =
+    rawCpf.length === 11
+      ? `***.${rawCpf.slice(3, 6)}.${rawCpf.slice(6, 9)}-**`
+      : '***.***.***-**';
+
+  const rawPhone = String(order.customer?.phone || '').replace(/\D/g, '');
+  const maskedPhone =
+    rawPhone.length >= 10
+      ? `(${rawPhone.slice(0, 2)}) *****-${rawPhone.slice(-4)}`
+      : '(**) *****-****';
+
+  const email = String(order.customer?.email || '');
+  const atIdx = email.indexOf('@');
+  const maskedEmail =
+    atIdx > 2 ? `${email[0]}***${email.slice(atIdx - 1)}` : email;
+
+  const street = String(order.address?.street || '');
+  const maskedStreet = street.length > 4 ? `${street.slice(0, 3)}*******` : 'Endereço protegido';
+
+  return {
+    ...order,
+    customer: {
+      ...order.customer,
+      cpf: maskedCpf,
+      phone: maskedPhone,
+      email: maskedEmail,
+    },
+    address: {
+      ...order.address,
+      street: maskedStreet,
+      number: '***',
+      complement: order.address?.complement ? '***' : undefined,
+    },
+  };
+}
+
 /**
  * Consulta de pedidos do cliente por E-mail, CPF ou Número do Pedido (sem senha).
+ * Proteção LGPD: Mascara dados pessoais (CPF, Telefone, Rua) para consultas não-administrativas.
  */
 export const lookupOrders = onCall({ region: 'southamerica-east1' }, async (request) => {
   const { query, orderId } = (request.data ?? {}) as { query?: string; orderId?: string };
   const db = getFirestore();
 
+  const isStaff = Boolean(
+    request.auth?.token?.active &&
+      Array.isArray(request.auth?.token?.perms) &&
+      request.auth?.token?.perms.includes('orders.view'),
+  );
+
   if (orderId && typeof orderId === 'string' && orderId.trim()) {
     const snap = await db.collection('orders').doc(orderId.trim().toUpperCase()).get();
     if (!snap.exists) return { orders: [] };
-    return { orders: [snap.data()] };
+    return { orders: [maskPII(snap.data(), isStaff)] };
   }
 
   if (!query || typeof query !== 'string' || query.trim().length < 3) {
@@ -451,6 +498,6 @@ export const lookupOrders = onCall({ region: 'southamerica-east1' }, async (requ
   }
 
   list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  return { orders: list };
+  return { orders: list.map((order) => maskPII(order, isStaff)) };
 });
 

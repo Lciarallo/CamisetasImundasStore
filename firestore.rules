@@ -85,7 +85,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Qualquer coleção não declarada acima fica fechada.
+    /* ---------------------------------------------------------------- */
+    /* Integrações e Chaves Bancárias (Acesso exclusivo Cloud Functions) */
+    /* ---------------------------------------------------------------- */
+    match /integrations/{integrationId} {
+      allow read, write: if false;
+    }
+
+    match /settings/{settingId} {
+      allow read, write: if false;
+    }
+
+    // Qualquer coleção não declarada acima fica terminantemente fechada.
     match /{document=**} {
       allow read, write: if false;
     }

@@ -20,7 +20,7 @@ const ROLES: Role[] = ['mestre', 'necromante', 'acolito', 'servo'];
  * `applyStaffAccess`, para documento e token nunca divergirem.
  */
 export const saveStaff = onCall({ region: REGION }, async (request) => {
-  const { uid: actorUid } = requirePermission(request, 'users.edit');
+  const { uid: actorUid, claims: actorClaims } = requirePermission(request, 'users.edit');
 
   const { uid, name, email, password, role, permissions, active } = (request.data ??
     {}) as {
@@ -41,6 +41,15 @@ export const saveStaff = onCall({ region: REGION }, async (request) => {
   }
   if (!ROLES.includes(role as Role)) {
     throw new HttpsError('invalid-argument', 'Cargo inválido.');
+  }
+
+  // Prevenção de Escalação de Privilégios:
+  // Apenas o Mestre pode criar ou editar Necromantes ou outros Mestres
+  if (actorClaims.role !== 'mestre' && (role === 'mestre' || role === 'necromante')) {
+    throw new HttpsError(
+      'permission-denied',
+      'Apenas o Mestre pode atribuir os cargos de Necromante ou Mestre.',
+    );
   }
 
   const db = getFirestore();
@@ -66,6 +75,11 @@ export const saveStaff = onCall({ region: REGION }, async (request) => {
     if (!existing.exists) throw new HttpsError('not-found', 'Usuário não encontrado.');
 
     const current = existing.data() as AdminUserDoc;
+
+    // Usuário não-mestre não pode editar o perfil de um Mestre ou Necromante
+    if (actorClaims.role !== 'mestre' && (current.role === 'mestre' || current.role === 'necromante')) {
+      throw new HttpsError('permission-denied', 'Você não tem permissão para editar este usuário.');
+    }
 
     // Rebaixar o Mestre trancaria todo mundo para fora da administração.
     if (current.role === 'mestre' && role !== 'mestre') {

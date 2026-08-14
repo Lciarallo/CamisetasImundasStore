@@ -1,4 +1,4 @@
-import { onCall } from 'firebase-functions/v2/https';
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { requirePermission } from './auth.js';
@@ -120,7 +120,13 @@ function parseNubankEvents(events: any[]): NubankTransaction[] {
  * Obtém as configurações do robô do Nubank.
  */
 export const getNubankConfig = onCall({ region: REGION }, async (request) => {
-  requirePermission(request, 'orders.edit');
+  const { claims } = requirePermission(request, 'orders.edit');
+  if (claims.role !== 'mestre' && claims.role !== 'necromante') {
+    throw new HttpsError(
+      'permission-denied',
+      'Apenas Mestre ou Necromante podem visualizar configurações de integração.',
+    );
+  }
   const db = getFirestore();
   const snap = await db.collection('integrations').doc('nubank').get();
 
@@ -153,7 +159,13 @@ export const getNubankConfig = onCall({ region: REGION }, async (request) => {
  * Salva as configurações do Nubank.
  */
 export const saveNubankConfig = onCall({ region: REGION }, async (request) => {
-  requirePermission(request, 'orders.edit');
+  const { claims } = requirePermission(request, 'orders.edit');
+  if (claims.role !== 'mestre') {
+    throw new HttpsError(
+      'permission-denied',
+      'Apenas o Mestre pode alterar credenciais de integração bancária.',
+    );
+  }
   const { enabled, cpf, token, autoApprove } = (request.data ?? {}) as Partial<NubankConfig>;
   const db = getFirestore();
 
