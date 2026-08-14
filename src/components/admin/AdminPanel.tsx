@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Banknote,
   Boxes,
   LayoutDashboard,
   LogOut,
@@ -23,6 +24,7 @@ import { OrdersAdmin } from './OrdersAdmin';
 import { ProductsAdmin, ConfirmDialog } from './ProductsAdmin';
 import { StockAdmin } from './StockAdmin';
 import { UsersAdmin } from './UsersAdmin';
+import { NubankAdmin } from './NubankAdmin';
 import { BootstrapSetup } from './BootstrapSetup';
 
 interface Tab {
@@ -35,6 +37,7 @@ interface Tab {
 const TABS: Tab[] = [
   { key: 'painel', label: 'Painel', icon: LayoutDashboard, permission: 'dashboard.view' },
   { key: 'pedidos', label: 'Pedidos', icon: Package, permission: 'orders.view' },
+  { key: 'nubank', label: 'Nubank PJ', icon: Banknote, permission: 'orders.view' },
   { key: 'estoque', label: 'Estoque', icon: Boxes, permission: 'products.view' },
   { key: 'catalogo', label: 'Catálogo', icon: Store, permission: 'products.view' },
   { key: 'usuarios', label: 'Usuários', icon: Users, permission: 'users.view' },
@@ -236,6 +239,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
             <>
               {tab === 'painel' && <Dashboard onNavigate={navigate} />}
               {tab === 'pedidos' && <OrdersAdmin />}
+              {tab === 'nubank' && <NubankAdmin />}
               {tab === 'estoque' && <StockAdmin />}
               {tab === 'catalogo' && <ProductsAdmin />}
               {tab === 'usuarios' && <UsersAdmin />}
