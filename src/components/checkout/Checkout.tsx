@@ -73,7 +73,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
   }, [step]);
 
   // PIX à vista sai mais barato; cartão e boleto pagam o total cheio.
-  const pixTotal = cartTotals.total * (1 - PIX_DISCOUNT);
+  const pixTotal = cartTotals.total <= 1.0 ? cartTotals.total : cartTotals.total * (1 - PIX_DISCOUNT);
   const payableTotal = method === 'pix' ? pixTotal : cartTotals.total;
 
   const installmentOptions = useMemo(

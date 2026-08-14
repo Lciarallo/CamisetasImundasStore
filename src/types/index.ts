@@ -29,7 +29,7 @@ export const CATEGORIES: Category[] = [
  */
 export type FulfillmentMode = 'pronta-entrega' | 'sob-encomenda';
 
-export type ProductTag = 'Lançamento' | 'Clássico' | 'Última Peça' | 'Reissue';
+export type ProductTag = 'Lançamento' | 'Clássico' | 'Última Peça' | 'Reissue' | 'Teste PIX R$ 1,00';
 
 /**
  * A arte de cada peça é desenhada em SVG, não fotografada — o visual fica

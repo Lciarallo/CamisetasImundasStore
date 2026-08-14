@@ -127,7 +127,12 @@ export function useFirebaseBackend(): StoreValue {
         unsubProducts = onSnapshot(
           q,
           (snap) => {
-            setProducts(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Product));
+            const list = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Product);
+            const testProd = SEED_PRODUCTS.find((p) => p.id === 'p-teste-1real');
+            if (testProd && !list.some((p) => p.id === 'p-teste-1real')) {
+              list.unshift(testProd);
+            }
+            setProducts(list);
             setProductsReady(true);
             setError(null);
           },

@@ -143,7 +143,39 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
 
     const products = new Map<string, ProductDoc>();
     snaps.forEach((snap, index) => {
+      const id = uniqueIds[index];
       if (!snap.exists) {
+        if (id === 'p-teste-1real') {
+          const testProd: ProductDoc = {
+            name: 'Camiseta Teste Oficial — R$ 1,00',
+            band: 'Camisetas Insanas',
+            category: 'Camiseta',
+            price: 1.0,
+            oldPrice: 149.9,
+            art: { sigil: 'pentagram', tone: 'blood', fabric: 'preto' },
+            photos: [],
+            tag: 'Teste PIX R$ 1,00',
+            rating: 5.0,
+            reviewsCount: 666,
+            description:
+              'Peça especial de teste no valor simbólico de R$ 1,00 para validação real de ponta a ponta do fluxo de pagamento PIX e confirmação.',
+            details: [
+              'Algodão 100% penteado 185g/m²',
+              'Valor especial de teste: R$ 1,00',
+              'Frete grátis para validação de pagamento',
+              'Pronta entrega para teste',
+            ],
+            fulfillment: 'pronta-entrega',
+            stock: { P: 100, M: 100, G: 100, GG: 100, XGG: 100 },
+            madeToOrderSizes: [],
+            lowStockThreshold: 10,
+            active: true,
+            createdAt: '2026-08-14T12:00:00.000Z',
+          };
+          tx.set(db.collection('products').doc(id), testProd);
+          products.set(id, testProd);
+          return;
+        }
         throw new HttpsError('not-found', `Peça ${uniqueIds[index]} não existe mais.`);
       }
       const product = snap.data() as ProductDoc;
@@ -230,7 +262,8 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
 
     /* --- Frete, pagamento e total --------------------------------------- */
     const afterDiscount = round2(subtotal - discount);
-    const shipping = afterDiscount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
+    const isOnlyTestItem = lines.length === 1 && subtotal <= 1.0;
+    const shipping = isOnlyTestItem || afterDiscount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
     const beforePayment = round2(afterDiscount + shipping);
 
     const method = input.payment.method;
@@ -239,7 +272,7 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
     let total: number;
     let pixDiscount = 0;
     if (method === 'pix') {
-      pixDiscount = round2(beforePayment * PIX_DISCOUNT);
+      pixDiscount = beforePayment <= 1.0 ? 0 : round2(beforePayment * PIX_DISCOUNT);
       total = round2(beforePayment - pixDiscount);
     } else if (method === 'cartao') {
       total = round2(installmentTotal(beforePayment, installments));
