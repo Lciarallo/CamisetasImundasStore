@@ -136,12 +136,29 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
   const db = getFirestore();
 
   const order = await db.runTransaction(async (tx) => {
-    /* --- Leitura: produtos e cupom, sempre da fonte da verdade ---------- */
+    /* --- 1. Todas as Leituras Primeiro (Obrigatório no Firestore) -------- */
     const uniqueIds = [...new Set(input.items.map((item) => item.productId))];
     const refs = uniqueIds.map((id) => db.collection('products').doc(id));
     const snaps = await tx.getAll(...refs);
 
+    let couponDoc: CouponDoc | undefined;
+    let couponCode: string | null = null;
+    if (input.coupon) {
+      const code = input.coupon.trim().toUpperCase();
+      const snap = await tx.get(db.collection('coupons').doc(code));
+      if (snap.exists) {
+        couponDoc = snap.data() as CouponDoc;
+        couponCode = code;
+      }
+    }
+
+    const counterRef = db.collection('counters').doc('orders');
+    const counterSnap = await tx.get(counterRef);
+
+    /* --- 2. Processamento em Memória ------------------------------------ */
     const products = new Map<string, ProductDoc>();
+    const toCreateProducts = new Map<string, ProductDoc>();
+
     snaps.forEach((snap, index) => {
       const id = uniqueIds[index];
       if (!snap.exists) {
@@ -172,7 +189,7 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
             active: true,
             createdAt: '2026-08-14T12:00:00.000Z',
           };
-          tx.set(db.collection('products').doc(id), testProd);
+          toCreateProducts.set(id, testProd);
           products.set(id, testProd);
           return;
         }
@@ -190,7 +207,6 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
     for (const item of input.items) {
       const key = `${item.productId}|${item.size}`;
       const existing = merged.get(key);
-      // Sem isso, mandar o mesmo par duas vezes driblaria o teto por linha.
       merged.set(key, {
         ...item,
         quantity: Math.min(
@@ -228,7 +244,6 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
         stockUpdates.set(item.productId, pending);
       }
 
-      // O preço vem do documento, nunca do que o cliente enviou.
       subtotal += product.price * item.quantity;
 
       lines.push({
@@ -248,16 +263,10 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
 
     /* --- Cupom ---------------------------------------------------------- */
     let discount = 0;
-    let couponCode: string | null = null;
-    if (input.coupon) {
-      const code = input.coupon.trim().toUpperCase();
-      const snap = await tx.get(db.collection('coupons').doc(code));
-      const coupon = snap.data() as CouponDoc | undefined;
-      // Cupom inválido não derruba a compra — só não é aplicado.
-      if (snap.exists && coupon?.active && subtotal >= coupon.minSubtotal) {
-        discount = round2((subtotal * coupon.percent) / 100);
-        couponCode = code;
-      }
+    if (couponDoc && couponDoc.active && subtotal >= couponDoc.minSubtotal) {
+      discount = round2((subtotal * couponDoc.percent) / 100);
+    } else {
+      couponCode = null;
     }
 
     /* --- Frete, pagamento e total --------------------------------------- */
@@ -281,15 +290,11 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
     }
 
     /* --- Número do pedido ----------------------------------------------- */
-    const counterRef = db.collection('counters').doc('orders');
-    const counterSnap = await tx.get(counterRef);
     const next = ((counterSnap.data()?.value as number | undefined) ?? 20_000) + 1;
     const orderId = `INS-${next}`;
 
-    /* --- Grava ----------------------------------------------------------- */
+    /* --- 3. Todas as Gravações ------------------------------------------ */
     const now = new Date().toISOString();
-    // Cartão aprova na hora; PIX e boleto só depois que compensarem — a
-    // confirmação viria do webhook do provedor (ver `payments.ts`).
     const status: OrderStatus = method === 'cartao' ? 'pago' : 'aguardando-pagamento';
 
     const doc = {
@@ -308,7 +313,6 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
         installments,
         cardLast4: input.payment.cardLast4 ?? null,
         cardBrand: input.payment.cardBrand ?? null,
-        // Referência do provedor entra aqui quando houver cobrança real.
         providerRef: null,
       },
       coupon: couponCode,
@@ -316,6 +320,9 @@ export const placeOrder = onCall({ region: 'southamerica-east1' }, async (reques
       history: [{ status, at: now, by: null }],
     };
 
+    for (const [prodId, prodData] of toCreateProducts) {
+      tx.set(db.collection('products').doc(prodId), prodData);
+    }
     tx.set(db.collection('orders').doc(orderId), doc);
     tx.set(counterRef, { value: next }, { merge: true });
 

@@ -594,6 +594,13 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                     </p>
                   </div>
                 )}
+
+                {errors.pagamento && (
+                  <div className="mt-4 border border-blood bg-blood/10 p-4 text-xs text-blood-bright">
+                    <p className="font-bold">Aviso:</p>
+                    <p className="mt-0.5">{errors.pagamento}</p>
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row">
@@ -612,7 +619,12 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                   {processing ? (
                     <>
                       <LoaderCircle className="h-4 w-4 animate-spin" />
-                      Processando
+                      Processando pedido...
+                    </>
+                  ) : method === 'pix' ? (
+                    <>
+                      <Lock className="h-3.5 w-3.5" />
+                      Já paguei pelo PIX · Concluir pedido ({money(chargedTotal)})
                     </>
                   ) : (
                     <>
