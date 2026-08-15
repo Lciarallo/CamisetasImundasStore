@@ -93,6 +93,30 @@ async function wipe() {
   });
 }
 
+/**
+ * O limitador é distribuído no Firestore e, no emulador, todos os cenários
+ * partem do mesmo IP. Limpar apenas seus buckets entre grupos mantém cada
+ * grupo abaixo do limite real sem apagar os dados funcionais do teste.
+ */
+async function clearRateLimits() {
+  const base = `http://${HOST}:8080/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
+  // `owner` é o token administrativo reservado do Firestore Emulator. Ele não
+  // existe em produção e permite que a infraestrutura do teste limpe buckets
+  // que, corretamente, são invisíveis para o SDK cliente.
+  const headers = { Authorization: 'Bearer owner' };
+  const response = await fetch(`${base}/rateLimits?pageSize=100`, { headers });
+  if (response.status === 404) return;
+  if (!response.ok) throw new Error(`Falha ao limpar rate limits (${response.status}).`);
+  const body = await response.json();
+  await Promise.all(
+    (body.documents ?? []).map((entry) =>
+      fetch(`http://${HOST}:8080/v1/${entry.name}`, { method: 'DELETE', headers }),
+    ),
+  );
+}
+
+const orderKey = (label) => `verify_${label}_${'x'.repeat(24)}`;
+
 /* -------------------------------------------------------------------------- */
 /* Dados de apoio                                                             */
 /* -------------------------------------------------------------------------- */
@@ -297,10 +321,12 @@ async function main() {
   section('Fechamento de pedido — o cliente não decide o preço');
 
   // Mesmo mandando preço, desconto e total forjados, o servidor ignora tudo.
+  const forgedKey = orderKey('preco_servidor');
   const forged = await call('placeOrder')({
     ...buyer,
+    idempotencyKey: forgedKey,
     items: [{ productId: 'p-normal', size: 'M', quantity: 2, unitPrice: 1, price: 1 }],
-    payment: { method: 'boleto' },
+    payment: { method: 'pix' },
     subtotal: 2,
     total: 0.01,
     shipping: 0,
@@ -311,17 +337,114 @@ async function main() {
   // 149,90 × 2 = 299,80 → passa do teto de frete grátis (299).
   check('subtotal vem do banco, não do cliente', close(order.subtotal, 299.8), `${order.subtotal}`);
   check('frete grátis acima de R$ 299', order.shipping === 0);
-  check('total forjado é ignorado', close(order.total, 299.8), `${order.total}`);
-  check('desconto forjado é ignorado', order.discount === 0, `${order.discount}`);
-  check('boleto entra como aguardando pagamento', order.status === 'aguardando-pagamento');
+  // O desconto PIX de 5% também é calculado exclusivamente no servidor.
+  check('total forjado é ignorado', close(order.total, 284.81), `${order.total}`);
+  check('desconto forjado é ignorado', close(order.discount, 14.99), `${order.discount}`);
+  check('PIX nasce aguardando confirmação', order.status === 'aguardando-pagamento');
+  check('cobrança PIX é gerada só depois do pedido', typeof order.payment?.pixCode === 'string');
+  check('token opaco volta somente ao checkout', order.customerAccessToken === forgedKey);
   check('número do pedido é sequencial', /^INS-\d+$/.test(order.id), order.id);
 
   const afterFirst = await getDoc(doc(db, 'products', 'p-normal'));
   check('estoque baixou 2 unidades', afterFirst.data()?.stock?.M === 3, `${afterFirst.data()?.stock?.M}`);
 
+  const repeated = await call('placeOrder')({
+    ...buyer,
+    idempotencyKey: forgedKey,
+    items: [{ productId: 'p-normal', size: 'M', quantity: 2, unitPrice: 1, price: 1 }],
+    payment: { method: 'pix' },
+    subtotal: 2,
+    total: 0.01,
+    shipping: 0,
+    discount: 999,
+  });
+  const afterRepeated = await getDoc(doc(db, 'products', 'p-normal'));
+  check('retry idempotente devolve o mesmo pedido', repeated.data.id === order.id);
+  check(
+    'retry idempotente não baixa o estoque outra vez',
+    afterRepeated.data()?.stock?.M === 3,
+    `${afterRepeated.data()?.stock?.M}`,
+  );
+
+  const reusedForAnotherCart = await denied(
+    call('placeOrder')({
+      ...buyer,
+      idempotencyKey: forgedKey,
+      items: [{ productId: 'p-normal', size: 'M', quantity: 1 }],
+      payment: { method: 'pix' },
+    }),
+  );
+  check(
+    'a mesma chave não pode autorizar outro payload',
+    reusedForAnotherCart === 'functions/already-exists',
+    `veio ${reusedForAnotherCart}`,
+  );
+
+  // A loja é PIX à vista. Nenhuma tela oferece outro método, então qualquer
+  // outro valor aqui é payload forjado — e o servidor precisa recusar sozinho.
+  for (const [label, method] of [
+    ['cartão', 'cartao'],
+    ['boleto', 'boleto'],
+    ['método desconhecido', 'cripto'],
+  ]) {
+    const refused = await denied(
+      call('placeOrder')({
+        ...buyer,
+        idempotencyKey: orderKey(`metodo_${method}`),
+        items: [{ productId: 'p-normal', size: 'G', quantity: 1 }],
+        payment: { method },
+      }),
+    );
+    check(
+      `${label} é recusado: a loja só cobra por PIX`,
+      refused === 'functions/invalid-argument',
+      `veio ${refused}`,
+    );
+  }
+
+  const missingMethod = await denied(
+    call('placeOrder')({
+      ...buyer,
+      idempotencyKey: orderKey('metodo_ausente'),
+      items: [{ productId: 'p-normal', size: 'G', quantity: 1 }],
+    }),
+  );
+  check(
+    'pedido sem forma de pagamento é recusado',
+    missingMethod === 'functions/invalid-argument',
+    `veio ${missingMethod}`,
+  );
+
+  /* --- Consulta pública --------------------------------------------------- */
+  section('Consulta de pedido — número e segredo opaco');
+
+  const withoutToken = await call('lookupOrders')({ orderId: order.id });
+  check('número sequencial sozinho não expõe o pedido', withoutToken.data.orders?.length === 0);
+
+  const wrongToken = await call('lookupOrders')({
+    orderId: order.id,
+    accessToken: orderKey('token_incorreto'),
+  });
+  check('token incorreto não expõe o pedido', wrongToken.data.orders?.length === 0);
+
+  const rightToken = await call('lookupOrders')({ orderId: order.id, accessToken: forgedKey });
+  check('número e token corretos devolvem o pedido', rightToken.data.orders?.[0]?.id === order.id);
+  check(
+    'hash do token nunca é devolvido ao cliente',
+    rightToken.data.orders?.[0]?.customerAccessTokenHash === undefined,
+  );
+
+  const emailLookup = await denied(call('lookupOrders')({ email: buyer.customer.email }));
+  check('busca pública por e-mail foi removida', emailLookup === 'functions/invalid-argument');
+  const cpfLookup = await denied(call('lookupOrders')({ cpf: buyer.customer.cpf }));
+  check('busca pública por CPF foi removida', cpfLookup === 'functions/invalid-argument');
+
+  await clearRateLimits();
+
   /* --- PIX, cupom e frete ------------------------------------------------ */
   const pix = await call('placeOrder')({
     ...buyer,
+    idempotencyKey: orderKey('pix_cupom'),
     items: [{ productId: 'p-normal', size: 'P', quantity: 1 }],
     payment: { method: 'pix' },
     coupon: 'culto10',
@@ -333,32 +456,25 @@ async function main() {
 
   const badCoupon = await call('placeOrder')({
     ...buyer,
+    idempotencyKey: orderKey('cupom_invalido'),
     items: [{ productId: 'p-normal', size: 'P', quantity: 1 }],
     payment: { method: 'pix' },
     coupon: 'NAOEXISTE',
   });
   check('cupom inválido não derruba a compra', badCoupon.data.coupon === null);
 
-  /* --- Cartão parcelado --------------------------------------------------- */
-  const card6 = await call('placeOrder')({
+  const cancelMe = await call('placeOrder')({
     ...buyer,
-    items: [{ productId: 'p-normal', size: 'G', quantity: 2 }],
-    payment: { method: 'cartao', installments: 6, cardLast4: '4242', cardBrand: 'visa' },
+    idempotencyKey: orderKey('cancelamento'),
+    items: [{ productId: 'p-normal', size: 'XGG', quantity: 1 }],
+    payment: { method: 'pix' },
   });
-  check('6x sem juros mantém o total', close(card6.data.total, 299.8), `${card6.data.total}`);
-  check('cartão aprova na hora', card6.data.status === 'pago');
-
-  const card12 = await call('placeOrder')({
-    ...buyer,
-    items: [{ productId: 'p-normal', size: 'GG', quantity: 2 }],
-    payment: { method: 'cartao', installments: 12, cardLast4: '4242', cardBrand: 'visa' },
-  });
-  check('12x cobra juros', card12.data.total > 299.8 + 10, `${card12.data.total}`);
 
   /* --- Limites ------------------------------------------------------------ */
   const overLine = await denied(
     call('placeOrder')({
       ...buyer,
+      idempotencyKey: orderKey('quantidade_alta'),
       items: [{ productId: 'p-normal', size: 'M', quantity: 99 }],
       payment: { method: 'pix' },
     }),
@@ -368,6 +484,7 @@ async function main() {
   const draftBuy = await denied(
     call('placeOrder')({
       ...buyer,
+      idempotencyKey: orderKey('rascunho'),
       items: [{ productId: 'p-rascunho', size: 'M', quantity: 1 }],
       payment: { method: 'pix' },
     }),
@@ -378,9 +495,12 @@ async function main() {
     `veio ${draftBuy}`,
   );
 
+  await clearRateLimits();
+
   const badSize = await denied(
     call('placeOrder')({
       ...buyer,
+      idempotencyKey: orderKey('tamanho_invalido'),
       items: [{ productId: 'p-encomenda', size: 'XGG', quantity: 1 }],
       payment: { method: 'pix' },
     }),
@@ -394,6 +514,7 @@ async function main() {
   const badCpf = await denied(
     call('placeOrder')({
       ...buyer,
+      idempotencyKey: orderKey('cpf_invalido'),
       customer: { ...buyer.customer, cpf: '111.111.111-11' },
       items: [{ productId: 'p-normal', size: 'M', quantity: 1 }],
       payment: { method: 'pix' },
@@ -404,10 +525,13 @@ async function main() {
   /* --- Concorrência: última peça ------------------------------------------ */
   section('Estoque sob concorrência');
 
+  await clearRateLimits();
+
   const race = await Promise.allSettled(
-    Array.from({ length: 5 }, () =>
+    Array.from({ length: 5 }, (_, index) =>
       call('placeOrder')({
         ...buyer,
+        idempotencyKey: orderKey(`corrida_${index}`),
         items: [{ productId: 'p-ultima', size: 'M', quantity: 1 }],
         payment: { method: 'pix' },
       }),
@@ -424,7 +548,45 @@ async function main() {
 
   await signInWithEmailAndPassword(auth, 'mestre@example.com', 'segredo123');
 
-  const paidOrder = card6.data.id;
+  const beforeCancellation = await getDoc(doc(db, 'products', 'p-normal'));
+  await call('updateOrderStatus')({ orderId: cancelMe.data.id, status: 'cancelado' });
+  const afterCancellation = await getDoc(doc(db, 'products', 'p-normal'));
+  check(
+    'cancelar PIX pendente devolve a reserva ao estoque',
+    afterCancellation.data()?.stock?.XGG === beforeCancellation.data()?.stock?.XGG + 1,
+  );
+  const cancelAgain = await denied(
+    call('updateOrderStatus')({ orderId: cancelMe.data.id, status: 'cancelado' }),
+  );
+  const afterSecondCancellation = await getDoc(doc(db, 'products', 'p-normal'));
+  check('cancelar pedido encerrado outra vez é recusado', cancelAgain === 'functions/failed-precondition');
+  check(
+    'tentativa repetida de cancelamento não duplica estoque',
+    afterSecondCancellation.data()?.stock?.XGG === afterCancellation.data()?.stock?.XGG,
+  );
+
+  const paidOrder = order.id;
+  await call('updateOrderStatus')({ orderId: paidOrder, status: 'pago' });
+  const paidSnapshot = await getDoc(doc(db, 'orders', paidOrder));
+  check(
+    'confirmação manual mantém o estado do pagamento consistente',
+    paidSnapshot.data()?.payment?.status === 'aprovado' &&
+      paidSnapshot.data()?.payment?.confirmedManually === true,
+  );
+  const stockBeforePaidCancel = (await getDoc(doc(db, 'products', 'p-normal'))).data()?.stock?.M;
+  const paidCancel = await denied(
+    call('updateOrderStatus')({ orderId: paidOrder, status: 'cancelado' }),
+  );
+  const stockAfterPaidCancel = (await getDoc(doc(db, 'products', 'p-normal'))).data()?.stock?.M;
+  check(
+    'pedido pago não é cancelado sem fluxo de reembolso',
+    paidCancel === 'functions/failed-precondition',
+    `veio ${paidCancel}`,
+  );
+  check(
+    'cancelamento recusado de pedido pago não repõe estoque',
+    stockAfterPaidCancel === stockBeforePaidCancel,
+  );
   const skipStep = await denied(
     call('updateOrderStatus')({ orderId: paidOrder, status: 'entregue' }),
   );
@@ -663,9 +825,19 @@ async function main() {
     },
   );
   check(
-    'webhook sem segredo configurado recusa (503)',
-    webhookNoSecret.status === 503,
+    'webhook sem assinatura nunca é aceito',
+    webhookNoSecret.status === 401 || webhookNoSecret.status === 503,
     `veio ${webhookNoSecret.status}`,
+  );
+
+  const afterForgedWebhook = await call('lookupOrders')({
+    orderId: pix.data.id,
+    accessToken: pix.data.customerAccessToken,
+  });
+  check(
+    'webhook recusado não confirma o pagamento',
+    afterForgedWebhook.data.orders?.[0]?.status === 'aguardando-pagamento',
+    `veio ${afterForgedWebhook.data.orders?.[0]?.status}`,
   );
 
   /* ---------------------------------------------------------------------- */

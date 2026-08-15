@@ -2,14 +2,14 @@
 
 > **Vestidos para o fim** — camisetas de banda de black metal, pronta-entrega e sob encomenda.
 
-E-commerce completo em React + TypeScript + Vite, com vitrine, checkout multi-etapa
-(PIX, cartão e boleto) e painel administrativo com estatísticas, controle de
+E-commerce completo em React + TypeScript + Vite, com vitrine, checkout PIX
+multi-etapa e painel administrativo com estatísticas, controle de
 privilégios e gestão de estoque.
 
 **No ar:** https://camisetas-imundas-store.web.app
 
-> ⚠️ Projeto fictício, para demonstração. As bandas foram inventadas para a loja —
-> nenhuma banda real é referenciada. Nenhuma cobrança é processada.
+> ⚠️ As bandas são fictícias. O modo local não gera cobrança; uma implantação
+> Firebase com Mercado Pago configurado processa PIX real.
 
 ---
 
@@ -51,11 +51,15 @@ Monocromática por conceito: **breu**, **osso** e **sangue**. Nada mais.
 
 Página dedicada em três etapas, no padrão de loja grande, com resumo fixo lateral.
 
+**PIX à vista é a única forma de pagamento.** Não há escolha de método na tela,
+porque não há escolha no servidor: `placeOrder` recusa qualquer outro valor.
+Cartão exigiria tokenização e responsabilidade sobre dado de portador; boleto,
+conciliação de registro bancário. Nenhum dos dois se sustenta sem um PSP
+dedicado, e oferecer o botão desabilitado só anunciaria uma promessa vazia.
+
 | Recurso | Detalhe |
 |---|---|
-| **PIX** | BR Code EMV **real**, com CRC16/CCITT-FALSE calculado. O QR abre em app de banco. 5% de desconto à vista. |
-| **Cartão** | Detecção de bandeira, validação por **Luhn**, validade e CVV. Parcelamento em 12x — 6x sem juros, tabela Price a partir da 7ª. |
-| **Boleto** | Vencimento e prazo de compensação. |
+| **PIX** | Cobrança dinâmica criada no servidor pelo Mercado Pago, com expiração e 5% de desconto à vista. |
 | **Entrega** | Busca de endereço por CEP via ViaCEP, com preenchimento manual se a API cair. |
 | **Validação** | CPF com dígitos verificadores, e-mail, telefone e CEP. |
 
@@ -74,8 +78,8 @@ No **modo local** existem quatro contas de demonstração com senha `insanas`
 (`mestre@`, `necromante@`, `acolito@` e `servo@camisetasinsanas.com.br`), e a
 tela de login traz um atalho para cada uma. Com backend configurado esse atalho
 some: ali ele seria um catálogo de e-mails válidos para quem quisesse tentar a
-sorte. A primeira conta é criada pela tela de instalação (ver
-[Backend](#-backend-firebase)).
+sorte. Em produção, o primeiro Mestre é provisionado por um canal administrativo,
+nunca por uma função pública (ver [Backend](#-backend-firebase)).
 
 - **Painel**: faturamento, pedidos, ticket médio e peças vendidas com variação
   contra o período anterior; série diária com crosshair; ranking de peças e
@@ -127,7 +131,7 @@ do módulo:
 
 | Modo | Quando | Dados | Total do pedido |
 |---|---|---|---|
-| **local** | sem `VITE_FIREBASE_*` | `localStorage` | calculado no cliente |
+| **local** | sem `VITE_FIREBASE_*` | navegador; pedidos só em memória | calculado no cliente |
 | **firebase** | com as variáveis definidas | Firestore + Cloud Storage | recalculado no servidor |
 
 O painel avisa no topo quando está em modo local, para ninguém confundir
@@ -139,17 +143,20 @@ O ponto do backend é este: **nada que envolva dinheiro vem do cliente**. Ele
 manda só o que quer comprar e para onde enviar.
 
 - **`placeOrder`** é a única porta para criar um pedido. Lê o preço do banco,
-  aplica cupom, frete, desconto do PIX e juros do parcelamento, e confere e dá
+  aplica cupom, frete e desconto do PIX, e confere e dá
   baixa no estoque **dentro de uma transação** — duas compras simultâneas da
-  última peça não vendem a mesma unidade duas vezes.
+  última peça não vendem a mesma unidade duas vezes. A chave idempotente evita
+  pedidos duplicados quando uma resposta se perde.
+- **Reservas PIX vencem em 30 minutos.** O agendador cancela pedidos pendentes e
+  devolve o estoque uma única vez. Pedido pago não pode ser cancelado sem um
+  fluxo de reembolso.
 - **Regras de Firestore e Storage negam por padrão.** Pedido, produto, cupom e
   privilégio não têm escrita de cliente; só as funções, via Admin SDK, escrevem.
-- **Privilégios vivem em custom claims**, não em documento — autorizar não custa
-  uma leitura extra a cada regra. Documento e claim são gravados juntos em
-  `applyStaffAccess`, senão divergem.
-- **Conta desativada é checada explicitamente**: o token continua válido até
-  expirar, e sem essa checagem alguém banido seguiria operando com o token em
-  mãos.
+- **Privilégios aparecem em custom claims para a interface**, mas operações
+  sensíveis e regras consultam também o perfil atual da equipe. Assim, uma
+  desativação ou remoção de privilégio vale imediatamente, mesmo com token antigo.
+- **Consultas públicas de pedido** exigem número e código opaco de acesso; e-mail,
+  CPF e IDs sequenciais sozinhos não expõem PII.
 - **O Mestre** não pode ser rebaixado, desativado nem duplicado — qualquer um
   dos três trancaria todo mundo para fora da administração.
 - **Senhas** ficam no Firebase Auth, com hash. Nunca em texto puro, nunca no
@@ -157,15 +164,19 @@ manda só o que quer comprar e para onde enviar.
 
 ### Pagamento
 
-Ainda **simulado** — não há CNPJ nem conta em provedor. Mas o ponto de troca
-está isolado atrás da interface `PaymentGateway`
-([`functions/src/payments.ts`](functions/src/payments.ts)): plugar Mercado Pago,
-Asaas ou Pagar.me é escrever uma implementação e trocar a constante `gateway`,
-sem tocar em `placeOrder` nem no checkout. O webhook já existe com o formato
-certo, **incluindo verificação de assinatura** — o passo que costuma ser
-esquecido e transforma o endpoint numa porta aberta para qualquer um marcar
-pedidos como pagos. Sem `PAYMENT_WEBHOOK_SECRET` definido, ele recusa com 503 em
-vez de aceitar tudo.
+Produção usa **PIX dinâmico do Mercado Pago**. O servidor cria a cobrança com o
+total que acabou de recalcular, uma chave idempotente e expiração de 30 minutos.
+O webhook valida o manifesto HMAC oficial, consulta o pagamento no provedor e só
+confirma quando pedido, referência, método, moeda e valor coincidem. A mesma
+transação não pode quitar dois pedidos.
+
+O BR Code direto existe apenas no emulador e usa uma chave deliberadamente não
+pagável. Isso evita que um QR estático continue recebendo dinheiro depois de a
+reserva expirar.
+
+A conciliação Nubank foi mantida apenas para pedidos PIX direto legados. É manual,
+exclusiva do Mestre, usa `NUBANK_ACCESS_TOKEN` no Secret Manager e recusa
+correspondências ambíguas; pedidos novos do Mercado Pago usam o webhook oficial.
 
 ### Emuladores
 
@@ -177,11 +188,12 @@ firebase emulators:start --only auth,firestore,functions,storage
 npm run dev
 ```
 
-Com os emuladores no ar, `node scripts/verify-backend.mjs` roda **55
+Com os emuladores no ar, `node scripts/verify-backend.mjs` roda **78
 verificações ponta a ponta** contra eles — pedido forjado, adulteração de preço,
-privilégio por cargo, conta desativada, estoque sob concorrência e regras de
-Storage. Usa o SDK **cliente** de propósito: o Admin SDK passa por cima das
-regras, e o que interessa é exatamente o que um navegador hostil consegue fazer.
+método de pagamento fora do PIX, idempotência, consulta com token, webhook sem
+assinatura, privilégio por cargo, conta desativada, estoque sob concorrência e
+regras de Storage. Usa o SDK
+**cliente** de propósito: o Admin SDK passa por cima das regras.
 
 ### Publicando
 
@@ -192,7 +204,22 @@ regras, e o que interessa é exatamente o que um navegador hostil consegue fazer
 3. **Registre um app web** e copie as chaves para o `.env.local`. Elas são
    públicas por natureza — vão no bundle e qualquer um lê. O que protege os
    dados são as regras e as funções, nunca o sigilo da `apiKey`.
-4. Publique:
+4. **Configure App Check** com reCAPTCHA Enterprise, preencha
+   `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` e habilite a fiscalização no console.
+   `placeOrder` e `lookupOrders` exigem App Check por padrão fora do emulador.
+5. **Cadastre os segredos do pagamento** sem colocá-los em `.env` ou no Firestore:
+
+   ```bash
+   firebase functions:secrets:set MERCADO_PAGO_ACCESS_TOKEN
+   firebase functions:secrets:set MERCADO_PAGO_WEBHOOK_SECRET
+   # Somente se a conciliação legada Nubank for publicada:
+   firebase functions:secrets:set NUBANK_ACCESS_TOKEN
+   ```
+
+6. Cadastre no Mercado Pago o endpoint
+   `https://southamerica-east1-SEU-PROJETO.cloudfunctions.net/paymentWebhook`
+   e use no Secret Manager a assinatura secreta fornecida pelo próprio provedor.
+7. Publique:
 
    ```bash
    firebase deploy --only firestore:rules,storage:rules
@@ -200,10 +227,10 @@ regras, e o que interessa é exatamente o que um navegador hostil consegue fazer
    npm run build && firebase deploy --only hosting
    ```
 
-5. Abra `#/admin`. Enquanto não houver nenhum administrador, aparece a **tela de
-   instalação**: ela cria o primeiro Mestre e carrega o catálogo inicial. A
-   função por trás se recusa a rodar depois que existe qualquer administrador,
-   então não é uma porta que fica aberta.
+8. A instalação já existente preserva o Mestre atual. Em projeto novo, provisione
+   o primeiro Mestre via Firebase Admin SDK/console em um ambiente confiável. A
+   callable de bootstrap é intencionalmente limitada aos emuladores para impedir
+   que o primeiro visitante tome a instalação.
 
 As funções rodam em `southamerica-east1` (São Paulo), com teto de 10 instâncias
 — sem esse teto, um pico ou um laço acidental escala sem limite e a conta chega

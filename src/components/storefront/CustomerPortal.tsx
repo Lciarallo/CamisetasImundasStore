@@ -13,10 +13,13 @@ import {
 import type { Order, OrderStatus } from '../../types';
 import { ORDER_STATUS_LABEL } from '../../types';
 import { formatDate, money } from '../../lib/format';
+import {
+  readCustomerOrderAccess,
+  saveCustomerOrderAccess,
+} from '../../lib/customerOrders';
 import { useStore } from '../../store/StoreContext';
 import { TeeArtwork } from '../art/TeeArtwork';
 import { PixPanel } from '../checkout/PixPanel';
-import { buildPixPayload, INSANAS_PIX } from '../../lib/pix';
 
 const STEPS: { status: OrderStatus; label: string }[] = [
   { status: 'aguardando-pagamento', label: 'Pedido Criado' },
@@ -28,13 +31,8 @@ const STEPS: { status: OrderStatus; label: string }[] = [
 
 export function CustomerPortal({ onClose }: { onClose: () => void }) {
   const { lookupOrders } = useStore();
-  const [query, setQuery] = useState(() => {
-    try {
-      return localStorage.getItem('insanas_customer_email') || '';
-    } catch {
-      return '';
-    }
-  });
+  const [orderId, setOrderId] = useState('');
+  const [accessToken, setAccessToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [searched, setSearched] = useState(false);
@@ -43,50 +41,46 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
 
   // Carrega automaticamente os pedidos salvos no navegador do cliente
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('insanas_customer_orders');
-      if (stored) {
-        const ids = JSON.parse(stored) as string[];
-        if (Array.isArray(ids) && ids.length > 0) {
-          setLoading(true);
-          Promise.all(ids.map((id) => lookupOrders(id)))
-            .then((results) => {
-              const all = results.flat();
-              // Remove duplicados
-              const unique = Array.from(new Map(all.map((o) => [o.id, o])).values());
-              unique.sort(
-                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-              );
-              setOrders(unique);
-              setSearched(true);
-            })
-            .finally(() => setLoading(false));
-        }
-      }
-    } catch {
-      // ignore
-    }
+    const saved = readCustomerOrderAccess();
+    if (saved.length === 0) return;
+
+    let active = true;
+    setLoading(true);
+    void Promise.all(saved.map(({ id, token }) => lookupOrders(id, token)))
+      .then((results) => {
+        if (!active) return;
+        const all = results.flat();
+        const unique = Array.from(new Map(all.map((order) => [order.id, order])).values());
+        unique.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+        setOrders(unique);
+        setSearched(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [lookupOrders]);
 
-  const handleSearch = async (event?: React.FormEvent) => {
-    event?.preventDefault();
-    if (!query.trim()) return;
+  const handleSearch = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedOrderId = orderId.trim();
+    const normalizedAccessToken = accessToken.trim();
+    if (!normalizedOrderId || !normalizedAccessToken) return;
 
     setLoading(true);
     setSearched(true);
     try {
-      const res = await lookupOrders(query.trim());
+      const res = await lookupOrders(normalizedOrderId, normalizedAccessToken);
       setOrders(res);
 
-      // Salva os IDs encontrados no histórico local
       if (res.length > 0) {
-        try {
-          const stored = localStorage.getItem('insanas_customer_orders');
-          const current = stored ? (JSON.parse(stored) as string[]) : [];
-          const merged = Array.from(new Set([...current, ...res.map((o) => o.id)]));
-          localStorage.setItem('insanas_customer_orders', JSON.stringify(merged));
-        } catch {
-          // ignore
+        for (const order of res) {
+          saveCustomerOrderAccess({ id: order.id, token: normalizedAccessToken });
         }
       }
     } finally {
@@ -134,20 +128,44 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
 
         {/* Barra de Busca */}
         <div className="border-b border-smoke/70 bg-pitch/60 p-5">
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-dust" />
+          <form
+            onSubmit={handleSearch}
+            className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+          >
+            <label>
+              <span className="label">Número do pedido</span>
+              <div className="relative">
+                <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-dust" />
+                <input
+                  type="text"
+                  value={orderId}
+                  onChange={(event) => setOrderId(event.target.value)}
+                  placeholder="INS-20001"
+                  autoComplete="off"
+                  className="field pl-9 text-xs"
+                />
+              </div>
+            </label>
+            <label>
+              <span className="label">Código de acesso</span>
               <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar por E-mail, CPF ou Número do Pedido (ex: INS-20001)..."
-                className="field pl-9 text-xs"
+                type="password"
+                value={accessToken}
+                onChange={(event) => setAccessToken(event.target.value)}
+                placeholder="Código recebido ao comprar"
+                autoComplete="off"
+                className="field font-mono text-xs"
               />
+            </label>
+            <div>
+              <button
+                type="submit"
+                disabled={loading || !orderId.trim() || !accessToken.trim()}
+                className="btn btn-blood w-full text-xs sm:w-auto"
+              >
+                {loading ? 'Buscando...' : 'Consultar'}
+              </button>
             </div>
-            <button type="submit" disabled={loading} className="btn btn-blood shrink-0 text-xs">
-              {loading ? 'Buscando...' : 'Consultar'}
-            </button>
           </form>
         </div>
 
@@ -158,7 +176,7 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
               <Package className="mx-auto h-12 w-12 text-dust opacity-40" />
               <p className="mt-3 text-sm text-bone">Nenhum pedido encontrado</p>
               <p className="mt-1 text-xs text-dust">
-                Verifique se o e-mail, CPF ou número do pedido foram digitados corretamente.
+                Verifique o número do pedido e o código de acesso.
               </p>
             </div>
           )}
@@ -167,7 +185,7 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
             <div className="py-10 text-center text-grave">
               <Package className="mx-auto h-10 w-10 text-dust opacity-30" />
               <p className="mt-2 text-xs text-parchment">
-                Digite seu e-mail ou CPF acima para acompanhar seus pedidos em tempo real.
+                Informe o número do pedido e o código de acesso recebido na compra.
               </p>
             </div>
           )}
@@ -256,12 +274,19 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
                         Total a pagar: <strong className="text-bone">{money(order.total)}</strong>
                       </p>
                     </div>
-                    <button
-                      onClick={() => setSelectedPixOrder(order)}
-                      className="btn btn-blood text-xs"
-                    >
-                      Pagar com PIX agora
-                    </button>
+                    {order.payment.pixCode ? (
+                      <button
+                        onClick={() => setSelectedPixOrder(order)}
+                        className="btn btn-blood text-xs"
+                      >
+                        Pagar com PIX agora
+                      </button>
+                    ) : (
+                      <p className="max-w-xs text-[0.65rem] text-blood-bright">
+                        Código PIX indisponível. Não faça uma transferência avulsa;
+                        procure o suporte.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -355,7 +380,7 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Modal Secundário de PIX */}
-        {selectedPixOrder && (
+        {selectedPixOrder?.payment.pixCode && (
           <div
             className="anim-fade fixed inset-0 z-80 flex items-center justify-center bg-void/90 p-4"
             onClick={() => setSelectedPixOrder(null)}
@@ -363,26 +388,25 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
             <div
               className="panel-raised anim-rise w-full max-w-lg p-5"
               onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pix-payment-title"
             >
               <div className="flex items-center justify-between border-b border-smoke pb-3">
-                <p className="heading-carved text-xs text-bone">
+                <p id="pix-payment-title" className="heading-carved text-xs text-bone">
                   Pagar Pedido {selectedPixOrder.id}
                 </p>
                 <button
                   onClick={() => setSelectedPixOrder(null)}
                   className="text-grave hover:text-bone"
+                  aria-label="Fechar pagamento PIX"
                 >
                   <XCircle className="h-5 w-5" />
                 </button>
               </div>
               <div className="pt-4">
                 <PixPanel
-                  payload={buildPixPayload({
-                    ...INSANAS_PIX,
-                    amount: selectedPixOrder.total,
-                    txId: selectedPixOrder.id.replace(/\D/g, '') || 'INSANAS',
-                    description: `Pedido ${selectedPixOrder.id}`,
-                  })}
+                  payload={selectedPixOrder.payment.pixCode}
                   amount={selectedPixOrder.total}
                 />
               </div>

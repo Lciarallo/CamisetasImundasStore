@@ -13,7 +13,13 @@ import type {
 import { SEED_COUPONS } from '../data/seed';
 import { SEED_PRODUCTS } from '../data/products';
 import { usePersistentState } from '../lib/storage';
-import { loadFirestore, loadAuth, loadFunctions, loadStorage } from '../lib/firebase';
+import {
+  isUsingFirebaseEmulators,
+  loadFirestore,
+  loadAuth,
+  loadFunctions,
+  loadStorage,
+} from '../lib/firebase';
 import { availableFor, computeTotals } from './cart';
 import type { OrderDraft, Result, StoreValue } from './types';
 
@@ -128,10 +134,6 @@ export function useFirebaseBackend(): StoreValue {
           q,
           (snap) => {
             const list = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Product);
-            const testProd = SEED_PRODUCTS.find((p) => p.id === 'p-teste-1real');
-            if (testProd && !list.some((p) => p.id === 'p-teste-1real')) {
-              list.unshift(testProd);
-            }
             setProducts(list);
             setProductsReady(true);
             setError(null);
@@ -225,7 +227,7 @@ export function useFirebaseBackend(): StoreValue {
   // ausência de peças, que é o único sinal legível sem estar autenticado.
   useEffect(() => {
     if (productsReady && authReady) {
-      setNeedsBootstrap(products.length === 0 && !session);
+      setNeedsBootstrap(isUsingFirebaseEmulators && products.length === 0 && !session);
     }
   }, [productsReady, authReady, products.length, session]);
 
@@ -346,6 +348,7 @@ export function useFirebaseBackend(): StoreValue {
         address: draft.address,
         payment: draft.payment,
         coupon: draft.coupon ?? null,
+        idempotencyKey: draft.idempotencyKey,
       });
     },
     [cart],
@@ -364,9 +367,12 @@ export function useFirebaseBackend(): StoreValue {
   );
 
   const lookupOrders = useCallback(
-    async (query: string): Promise<Order[]> => {
+    async (orderId: string, accessToken?: string): Promise<Order[]> => {
       try {
-        const res = (await call('lookupOrders', { query })) as { orders?: Order[] };
+        const res = (await call('lookupOrders', {
+          orderId,
+          ...(accessToken ? { accessToken } : {}),
+        })) as { orders?: Order[] };
         return Array.isArray(res?.orders) ? res.orders : [];
       } catch {
         return [];

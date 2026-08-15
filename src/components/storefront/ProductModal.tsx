@@ -148,7 +148,7 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
                 </span>
               </div>
               <p className="mt-1 text-xs text-grave tabular-nums">
-                em até 6x de {money(product.price / 6)} sem juros · {money(product.price * 0.95)} no PIX
+                {money(product.price * 0.95)} no PIX à vista
               </p>
             </div>
 

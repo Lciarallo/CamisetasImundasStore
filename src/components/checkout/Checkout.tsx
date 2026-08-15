@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import {
   ArrowLeft,
-  Barcode,
   Check,
-  CreditCard,
   Hammer,
   LoaderCircle,
   Lock,
+  MapPin,
+  Pencil,
   QrCode,
+  SearchX,
   Truck,
+  WifiOff,
 } from 'lucide-react';
-import type { Customer, Order, PaymentMethod, ShippingAddress } from '../../types';
+import type { Customer, Order, ShippingAddress } from '../../types';
 import {
   isValidCEP,
   isValidCPF,
@@ -24,13 +26,16 @@ import {
   money,
   onlyDigits,
 } from '../../lib/format';
-import { BRAND_LABEL, buildInstallments, cardLast4, detectBrand } from '../../lib/card';
-import { INSANAS_PIX, buildPixPayload } from '../../lib/pix';
+import {
+  checkoutIdempotencyKey,
+  clearCheckoutAttempt,
+  saveCustomerOrderAccess,
+} from '../../lib/customerOrders';
+import { fetchCep } from '../../lib/cep';
 import { useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
 import { BrandLogo } from '../art/BrandLogo';
 import { TeeImage } from '../art/TeeImage';
-import { CardForm, EMPTY_CARD, validateCard, type CardState } from './CardForm';
 import { PIX_DISCOUNT, PixPanel } from './PixPanel';
 
 type Step = 'identificacao' | 'entrega' | 'pagamento' | 'confirmado';
@@ -57,30 +62,37 @@ export function Checkout({ onBack }: { onBack: () => void }) {
     useStore();
 
   const [step, setStep] = useState<Step>('identificacao');
-  const [customer, setCustomer] = useState<Customer>(() => {
-    try {
-      const saved = localStorage.getItem('insanas_saved_customer');
-      if (saved) return JSON.parse(saved) as Customer;
-    } catch {
-      // ignore
-    }
-    return EMPTY_CUSTOMER;
+  const [customer, setCustomer] = useState<Customer>(EMPTY_CUSTOMER);
+  const [address, setAddress] = useState<ShippingAddress>(EMPTY_ADDRESS);
+  const [idempotencyKey] = useState(() => {
+    const fingerprint = JSON.stringify({
+      coupon: appliedCoupon?.code ?? null,
+      items: cart
+        .map(({ productId, size, quantity }) => ({ productId, size, quantity }))
+        .sort((a, b) => `${a.productId}|${a.size}`.localeCompare(`${b.productId}|${b.size}`)),
+    });
+    return checkoutIdempotencyKey(fingerprint);
   });
-  const [address, setAddress] = useState<ShippingAddress>(() => {
-    try {
-      const saved = localStorage.getItem('insanas_saved_address');
-      if (saved) return JSON.parse(saved) as ShippingAddress;
-    } catch {
-      // ignore
-    }
-    return EMPTY_ADDRESS;
-  });
-  const [method, setMethod] = useState<PaymentMethod>('pix');
-  const [card, setCard] = useState<CardState>(EMPTY_CARD);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [cepLoading, setCepLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<Order | null>(null);
+
+  /*
+    A entrega é dirigida pelo CEP: enquanto ele não resolve, não há endereço
+    para mostrar nem para corrigir. `cepState` é o que decide a tela inteira.
+    - buscando  → só o campo de CEP, com carregando
+    - resolvido → resumo do que os Correios sabem + número e complemento
+    - sem-rua   → CEP único de cidade pequena; rua e bairro entram na mão
+    - inexistente / indisponível → dois problemas diferentes, duas mensagens
+  */
+  type CepState = 'vazio' | 'buscando' | 'resolvido' | 'sem-rua' | 'inexistente' | 'indisponivel';
+  const [cepState, setCepState] = useState<CepState>('vazio');
+  /** Aberto quando o visitante quer corrigir o que veio dos Correios. */
+  const [editingAddress, setEditingAddress] = useState(false);
+  const numberInputRef = useRef<HTMLInputElement>(null);
+  const streetInputRef = useRef<HTMLInputElement>(null);
+  /** Cancela a consulta anterior quando o CEP muda no meio do caminho. */
+  const cepRequestRef = useRef<AbortController | null>(null);
 
   // Corpo de bloco de propósito: com corpo de expressão o efeito devolveria o
   // retorno de scrollTo, e o React tentaria chamá-lo como função de limpeza.
@@ -88,31 +100,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
     window.scrollTo({ top: 0 });
   }, [step]);
 
-  // PIX à vista sai mais barato; cartão e boleto pagam o total cheio.
-  const pixTotal = cartTotals.total <= 1.0 ? cartTotals.total : cartTotals.total * (1 - PIX_DISCOUNT);
-  const payableTotal = method === 'pix' ? pixTotal : cartTotals.total;
-
-  const installmentOptions = useMemo(
-    () => buildInstallments(cartTotals.total),
-    [cartTotals.total],
-  );
-  const chosenInstallment =
-    installmentOptions.find((option) => option.count === card.installments) ??
-    installmentOptions[0];
-
-  const chargedTotal =
-    method === 'cartao' ? (chosenInstallment?.total ?? cartTotals.total) : payableTotal;
-
-  const pixPayload = useMemo(
-    () =>
-      buildPixPayload({
-        ...INSANAS_PIX,
-        amount: Number(pixTotal.toFixed(2)),
-        txId: `INSANA${Math.floor(cartTotals.total * 100)}`,
-        description: 'Pedido Camisetas Insanas',
-      }),
-    [pixTotal, cartTotals.total],
-  );
+  // Estimativa para o resumo. O valor definitivo sempre volta do servidor.
+  const pixTotal =
+    cartTotals.total <= 1.0
+      ? cartTotals.total
+      : cartTotals.total * (1 - PIX_DISCOUNT);
 
   /* ---------------------------------------------------------------------- */
   /* Validação por etapa                                                    */
@@ -149,7 +141,14 @@ export function Checkout({ onBack }: { onBack: () => void }) {
           : {};
 
     setErrors(found);
-    if (Object.keys(found).length > 0) return;
+    if (Object.keys(found).length > 0) {
+      // Erro em campo que o cartão do CEP mantém recolhido só é corrigível se
+      // a edição abrir junto — senão a mensagem aponta para algo invisível.
+      if (['street', 'district', 'city', 'state'].some((field) => field in found)) {
+        setEditingAddress(true);
+      }
+      return;
+    }
 
     setStep(step === 'identificacao' ? 'entrega' : 'pagamento');
   };
@@ -158,65 +157,97 @@ export function Checkout({ onBack }: { onBack: () => void }) {
   /* Busca de CEP (ViaCEP / Correios)                                       */
   /* ---------------------------------------------------------------------- */
 
+  const clearCepError = () =>
+    setErrors((previous) => {
+      const next = { ...previous };
+      delete next.cep;
+      return next;
+    });
+
   const lookupCep = useCallback(async (cep: string) => {
     const digits = onlyDigits(cep);
     if (digits.length !== 8) return;
 
-    setCepLoading(true);
+    // Digitar um CEP novo antes de o anterior responder é comum. Sem abortar,
+    // a resposta atrasada sobrescreveria o endereço certo pelo antigo.
+    cepRequestRef.current?.abort();
+    const controller = new AbortController();
+    cepRequestRef.current = controller;
+
+    setCepState('buscando');
+    setEditingAddress(false);
+    clearCepError();
+    // Limpa o que veio do CEP anterior. Sem isso, trocar um CEP válido por
+    // outro que falhe deixaria o endereço antigo na tela — e ele seguiria
+    // para o pedido travestido de endereço novo.
+    setAddress((previous) => ({ ...previous, street: '', district: '', city: '', state: '' }));
+
+    let result;
     try {
-      const response = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
-      if (!response.ok) throw new Error('Falha na resposta dos Correios');
-      const data = await response.json();
-
-      if (data.erro === true || data.erro === 'true') {
-        setErrors((prev) => ({
-          ...prev,
-          cep: 'CEP não encontrado nos Correios. Verifique o número ou preencha abaixo.',
-        }));
-        return;
-      }
-
-      setErrors((prev) => {
-        const next = { ...prev };
-        delete next.cep;
-        return next;
-      });
-
-      setAddress((previous) => {
-        // Se o usuário já tiver trocado de CEP enquanto a requisição rodava, descarta
-        if (onlyDigits(previous.cep) !== digits) return previous;
-        return {
-          ...previous,
-          street: data.logradouro || previous.street,
-          district: data.bairro || previous.district,
-          city: data.localidade || previous.city,
-          state: data.uf || previous.state,
-        };
-      });
+      result = await fetchCep(digits, controller.signal);
     } catch {
-      // Offline ou ViaCEP fora do ar: o usuário preenche à mão, sem travar.
-    } finally {
-      setCepLoading(false);
+      return; // Abortada por um CEP mais novo: quem venceu cuida da tela.
     }
+    if (controller.signal.aborted) return;
+
+    if (result.status === 'not-found') {
+      setCepState('inexistente');
+      return;
+    }
+    if (result.status === 'unavailable') {
+      setCepState('indisponivel');
+      return;
+    }
+
+    const { street, district, city, state, generic } = result.address;
+    setAddress((previous) => ({ ...previous, street, district, city, state }));
+    setCepState(generic ? 'sem-rua' : 'resolvido');
   }, []);
+
+  /** Troca de CEP invalida tudo que veio dele — nada de endereço meio antigo. */
+  const changeCep = (value: string) => {
+    const digits = onlyDigits(value);
+    setAddress((previous) => ({
+      ...previous,
+      cep: value,
+      ...(digits.length < 8
+        ? { street: '', district: '', city: '', state: '' }
+        : {}),
+    }));
+    if (digits.length === 8) {
+      void lookupCep(value);
+      return;
+    }
+    cepRequestRef.current?.abort();
+    setCepState('vazio');
+    setEditingAddress(false);
+    clearCepError();
+  };
+
+  /** Correios fora do ar ou CEP fora da base: o endereço vai todo na mão. */
+  const fillByHand = () => {
+    setCepState('sem-rua');
+    setEditingAddress(true);
+    clearCepError();
+  };
+
+  // O único campo que sobra depois de o CEP resolver é o número — então é
+  // nele que o cursor deve cair, sem o visitante ter que procurar.
+  useEffect(() => {
+    if (cepState === 'resolvido') numberInputRef.current?.focus();
+    if (cepState === 'sem-rua') streetInputRef.current?.focus();
+  }, [cepState]);
+
+  // Uma consulta em voo não pode chamar setState depois de a tela sair.
+  useEffect(() => () => cepRequestRef.current?.abort(), []);
 
   /* ---------------------------------------------------------------------- */
   /* Fechamento do pedido                                                   */
   /* ---------------------------------------------------------------------- */
 
   const finish = async () => {
-    if (method === 'cartao') {
-      const cardErrors = validateCard(card);
-      if (Object.keys(cardErrors).length > 0) {
-        setErrors(cardErrors as Record<string, string>);
-        return;
-      }
-    }
     setErrors({});
     setProcessing(true);
-
-    // Latência simulada — o gateway real levaria mais ou menos isso.
-    await new Promise((resolve) => window.setTimeout(resolve, 1400));
 
     // O cliente manda só o que quer comprar e para onde enviar. Preço,
     // desconto, frete, juros e total voltam recalculados do servidor — é o
@@ -224,14 +255,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
     let order: Order;
     try {
       order = await placeOrder({
+        idempotencyKey,
         customer,
         address,
-        payment: {
-          method,
-          installments: method === 'cartao' ? card.installments : 1,
-          cardLast4: method === 'cartao' ? cardLast4(card.number) : undefined,
-          cardBrand: method === 'cartao' ? BRAND_LABEL[detectBrand(card.number)] : undefined,
-        },
+        payment: { method: 'pix' },
         coupon: appliedCoupon?.code,
       });
     } catch (cause) {
@@ -246,20 +273,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
     }
 
     setPlacedOrder(order);
-    try {
-      localStorage.setItem('insanas_saved_customer', JSON.stringify(customer));
-      localStorage.setItem('insanas_saved_address', JSON.stringify(address));
-      localStorage.setItem('insanas_customer_email', customer.email);
-
-      const stored = localStorage.getItem('insanas_customer_orders');
-      const list = stored ? (JSON.parse(stored) as string[]) : [];
-      if (!list.includes(order.id)) {
-        list.unshift(order.id);
-        localStorage.setItem('insanas_customer_orders', JSON.stringify(list));
-      }
-    } catch {
-      // ignore
+    if (order.customerAccessToken) {
+      saveCustomerOrderAccess({ id: order.id, token: order.customerAccessToken });
     }
+    clearCheckoutAttempt(idempotencyKey);
     setStep('confirmado');
     clearCart();
 
@@ -281,7 +298,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
   /* ---------------------------------------------------------------------- */
 
   if (step === 'confirmado' && placedOrder) {
-    return <OrderConfirmation order={placedOrder} onBack={onBack} />;
+    return <OrderConfirmation order={placedOrder} mode={mode} onBack={onBack} />;
   }
 
   if (cart.length === 0) {
@@ -431,107 +448,208 @@ export function Checkout({ onBack }: { onBack: () => void }) {
 
           {step === 'entrega' && (
             <Section title="Para onde enviamos" step="02">
-              <div className="grid gap-4 sm:grid-cols-6">
-                <div className="sm:col-span-2">
-                  <Label text="CEP" error={errors.cep} />
-                  <div className="relative">
-                    <input
-                      inputMode="numeric"
-                      autoComplete="postal-code"
-                      value={maskCEP(address.cep)}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setAddress({ ...address, cep: value });
-                        if (onlyDigits(value).length === 8) void lookupCep(value);
-                      }}
-                      aria-invalid={Boolean(errors.cep)}
-                      className="field tabular-nums"
-                      placeholder="00000-000"
-                    />
-                    {cepLoading && (
-                      <LoaderCircle className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-blood-bright" />
-                    )}
-                  </div>
-                  <p className="mt-1 text-[0.65rem] text-grave">Preenchemos o resto sozinhos.</p>
-                  {address.city && address.state && isValidCEP(address.cep) && !errors.cep && (
-                    <div className="mt-2 flex items-center gap-1.5 rounded border border-smoke bg-pitch px-2.5 py-1.5 text-[0.68rem] text-parchment">
-                      <Truck className="h-3.5 w-3.5 text-blood-bright shrink-0" />
-                      <span>Correios (PAC/SEDEX) · {address.city}/{address.state}</span>
-                    </div>
+              {/*
+                O CEP vem sozinho e primeiro. Mostrar sete campos vazios de
+                uma vez faz o visitante digitar o que os Correios já sabem —
+                e cada campo a mais é uma chance a mais de errar o endereço.
+              */}
+              <div className="max-w-[13rem]">
+                <Label text="CEP" error={errors.cep} />
+                <div className="relative">
+                  <input
+                    autoFocus
+                    inputMode="numeric"
+                    autoComplete="postal-code"
+                    value={maskCEP(address.cep)}
+                    onChange={(event) => changeCep(event.target.value)}
+                    aria-invalid={Boolean(errors.cep)}
+                    aria-describedby="cep-ajuda"
+                    className="field text-lg tabular-nums tracking-wider"
+                    placeholder="00000-000"
+                  />
+                  {cepState === 'buscando' && (
+                    <LoaderCircle className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin text-blood-bright" />
+                  )}
+                  {(cepState === 'resolvido' || cepState === 'sem-rua') && !editingAddress && (
+                    <Check className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-blood-bright" />
                   )}
                 </div>
-
-                <div className="sm:col-span-4">
-                  <Label text="Rua" error={errors.street} />
-                  <input
-                    autoComplete="address-line1"
-                    value={address.street}
-                    onChange={(event) => setAddress({ ...address, street: event.target.value })}
-                    aria-invalid={Boolean(errors.street)}
-                    className="field"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <Label text="Número" error={errors.number} />
-                  <input
-                    value={address.number}
-                    onChange={(event) => setAddress({ ...address, number: event.target.value })}
-                    aria-invalid={Boolean(errors.number)}
-                    className="field"
-                  />
-                </div>
-                <div className="sm:col-span-4">
-                  <Label text="Complemento (opcional)" />
-                  <input
-                    value={address.complement}
-                    onChange={(event) =>
-                      setAddress({ ...address, complement: event.target.value })
-                    }
-                    className="field"
-                    placeholder="Apto, bloco, referência"
-                  />
-                </div>
-
-                <div className="sm:col-span-3">
-                  <Label text="Bairro" error={errors.district} />
-                  <input
-                    value={address.district}
-                    onChange={(event) =>
-                      setAddress({ ...address, district: event.target.value })
-                    }
-                    aria-invalid={Boolean(errors.district)}
-                    className="field"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <Label text="Cidade" error={errors.city} />
-                  <input
-                    value={address.city}
-                    onChange={(event) => setAddress({ ...address, city: event.target.value })}
-                    aria-invalid={Boolean(errors.city)}
-                    className="field"
-                  />
-                </div>
-                <div className="sm:col-span-1">
-                  <Label text="UF" error={errors.state} />
-                  <input
-                    maxLength={2}
-                    value={address.state}
-                    onChange={(event) =>
-                      setAddress({ ...address, state: event.target.value.toUpperCase() })
-                    }
-                    aria-invalid={Boolean(errors.state)}
-                    className="field uppercase"
-                  />
-                </div>
+                <p id="cep-ajuda" className="mt-1.5 text-[0.65rem] leading-relaxed text-grave">
+                  {cepState === 'buscando' ? (
+                    'Consultando os Correios...'
+                  ) : (
+                    <>
+                      Buscamos o endereço para você.{' '}
+                      <a
+                        href="https://buscacepinter.correios.com.br/app/endereco/index.php"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blood-bright underline underline-offset-2 hover:text-bone"
+                      >
+                        Não sei meu CEP
+                      </a>
+                    </>
+                  )}
+                </p>
               </div>
+
+              {/*
+                CEP inexistente e Correios fora do ar são problemas diferentes:
+                num o número está errado, no outro está certo e a culpa é nossa.
+                Tratar os dois com a mesma frase manda o visitante corrigir algo
+                que não tem defeito. Os dois, porém, têm a mesma saída.
+              */}
+              {(cepState === 'inexistente' || cepState === 'indisponivel') && (
+                <div className="mt-4 flex flex-col gap-3 border border-blood/50 bg-blood/10 p-4 sm:flex-row sm:items-center">
+                  {cepState === 'inexistente' ? (
+                    <SearchX className="h-5 w-5 shrink-0 text-blood-bright" />
+                  ) : (
+                    <WifiOff className="h-5 w-5 shrink-0 text-blood-bright" />
+                  )}
+                  <p className="flex-1 text-[0.72rem] leading-relaxed text-parchment">
+                    {cepState === 'inexistente'
+                      ? 'Não achamos esse CEP na base dos Correios. Confira os oito dígitos — ou escreva o endereço você mesmo.'
+                      : 'A consulta de CEP não respondeu agora. Seu CEP pode estar certo: escreva o endereço e siga em frente.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={fillByHand}
+                    className="btn btn-ghost shrink-0 text-[0.65rem]"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Preencher à mão
+                  </button>
+                </div>
+              )}
+
+              {/* Endereço resolvido: confirmação legível, não seis caixas de texto. */}
+              {cepState === 'resolvido' && !editingAddress && (
+                <div className="mt-4 flex items-start gap-3 border border-smoke bg-pitch p-4">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-blood-bright" />
+                  <div className="min-w-0 flex-1 text-[0.75rem] leading-relaxed">
+                    <p className="font-semibold text-bone">{address.street}</p>
+                    <p className="text-grave">
+                      {address.district && `${address.district} · `}
+                      {address.city}/{address.state} · CEP {maskCEP(address.cep)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingAddress(true)}
+                    className="flex shrink-0 items-center gap-1 text-[0.65rem] text-grave hover:text-blood-bright"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Corrigir
+                  </button>
+                </div>
+              )}
+
+              {/*
+                Aberto quando o CEP é o único da cidade (os Correios não têm rua
+                para ele), quando o visitante pediu para corrigir, ou quando a
+                consulta falhou. Nos três casos ele digita o que faltou.
+              */}
+              {(cepState === 'sem-rua' || editingAddress) && (
+                <div className="mt-4 grid gap-4 sm:grid-cols-6">
+                  {cepState === 'sem-rua' && !editingAddress && (
+                    <p className="sm:col-span-6 text-[0.7rem] leading-relaxed text-grave">
+                      Este CEP atende a cidade inteira, então os Correios não
+                      devolvem a rua. Complete abaixo.
+                    </p>
+                  )}
+                  <div className="sm:col-span-6">
+                    <Label text="Rua" error={errors.street} />
+                    <input
+                      ref={streetInputRef}
+                      autoComplete="address-line1"
+                      value={address.street}
+                      onChange={(event) => setAddress({ ...address, street: event.target.value })}
+                      aria-invalid={Boolean(errors.street)}
+                      className="field"
+                    />
+                  </div>
+                  <div className="sm:col-span-3">
+                    <Label text="Bairro" error={errors.district} />
+                    <input
+                      value={address.district}
+                      onChange={(event) =>
+                        setAddress({ ...address, district: event.target.value })
+                      }
+                      aria-invalid={Boolean(errors.district)}
+                      className="field"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Label text="Cidade" error={errors.city} />
+                    <input
+                      value={address.city}
+                      onChange={(event) => setAddress({ ...address, city: event.target.value })}
+                      aria-invalid={Boolean(errors.city)}
+                      className="field"
+                    />
+                  </div>
+                  <div className="sm:col-span-1">
+                    <Label text="UF" error={errors.state} />
+                    <input
+                      maxLength={2}
+                      value={address.state}
+                      onChange={(event) =>
+                        setAddress({ ...address, state: event.target.value.toUpperCase() })
+                      }
+                      aria-invalid={Boolean(errors.state)}
+                      className="field uppercase"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Número e complemento: o que nenhum CEP sabe. */}
+              {cepState !== 'vazio' && cepState !== 'buscando' && (
+                <div className="mt-4 grid gap-4 sm:grid-cols-6">
+                  <div className="sm:col-span-2">
+                    <Label text="Número" error={errors.number} />
+                    <input
+                      ref={numberInputRef}
+                      inputMode="numeric"
+                      autoComplete="address-line2"
+                      value={address.number}
+                      onChange={(event) => setAddress({ ...address, number: event.target.value })}
+                      aria-invalid={Boolean(errors.number)}
+                      className="field"
+                      placeholder="123"
+                    />
+                    <label className="mt-2 flex cursor-pointer items-center gap-2 text-[0.65rem] text-grave">
+                      <input
+                        type="checkbox"
+                        checked={address.number.trim().toUpperCase() === 'S/N'}
+                        onChange={(event) =>
+                          setAddress({ ...address, number: event.target.checked ? 'S/N' : '' })
+                        }
+                        className="h-3 w-3 accent-[var(--color-blood)]"
+                      />
+                      Sem número
+                    </label>
+                  </div>
+                  <div className="sm:col-span-4">
+                    <Label text="Complemento (opcional)" />
+                    <input
+                      value={address.complement}
+                      onChange={(event) =>
+                        setAddress({ ...address, complement: event.target.value })
+                      }
+                      className="field"
+                      placeholder="Apto, bloco, referência"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="mt-5 flex items-start gap-3 border border-smoke bg-pitch p-4">
                 <Truck className="mt-0.5 h-4 w-4 shrink-0 text-blood-bright" />
                 <div className="text-[0.72rem] text-parchment">
                   <p className="font-semibold text-bone">
                     {cartTotals.shipping === 0 ? 'Frete grátis' : `Frete ${money(cartTotals.shipping)}`}
+                    {address.city && address.state && ` · Correios para ${address.city}/${address.state}`}
                   </p>
                   <p className="mt-0.5 text-grave">
                     {cartTotals.productionDays > 0
@@ -548,7 +666,12 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                 >
                   Voltar
                 </button>
-                <button onClick={advance} className="btn btn-blood order-1 flex-1 sm:order-2">
+                {/* Sem CEP resolvido não há endereço nenhum para validar. */}
+                <button
+                  onClick={advance}
+                  disabled={cepState === 'vazio' || cepState === 'buscando'}
+                  className="btn btn-blood order-1 flex-1 sm:order-2"
+                >
                   Continuar para pagamento
                 </button>
               </div>
@@ -556,64 +679,32 @@ export function Checkout({ onBack }: { onBack: () => void }) {
           )}
 
           {step === 'pagamento' && (
-            <Section title="Como você prefere pagar" step="03">
-              {/* Escolha do método */}
-              <div className="grid gap-3 sm:grid-cols-3">
-                {(
-                  [
-                    { key: 'pix', icon: QrCode, label: 'PIX', hint: '5% de desconto' },
-                    { key: 'cartao', icon: CreditCard, label: 'Cartão', hint: 'até 12x' },
-                    { key: 'boleto', icon: Barcode, label: 'Boleto', hint: '2 dias úteis' },
-                  ] as const
-                ).map(({ key, icon: Icon, label, hint }) => {
-                  const active = method === key;
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => {
-                        setMethod(key);
-                        setErrors({});
-                      }}
-                      aria-pressed={active}
-                      className={`flex flex-col items-center gap-1.5 border p-4 transition-colors ${
-                        active
-                          ? 'border-blood bg-blood/10 text-bone'
-                          : 'border-iron text-grave hover:border-blood/50 hover:text-parchment'
-                      }`}
-                    >
-                      <Icon className={`h-5 w-5 ${active ? 'text-blood-bright' : ''}`} />
-                      <span className="heading-carved text-[0.6rem]">{label}</span>
-                      <span className="text-[0.6rem] text-grave">{hint}</span>
-                    </button>
-                  );
-                })}
+            <Section title="Pagamento por PIX" step="03">
+              {/*
+                Método único: a loja cobra só por PIX. Uma grade de opções com
+                dois cartões desabilitados anunciaria uma escolha que não existe.
+              */}
+              <div className="flex items-center justify-between gap-4 border border-blood bg-blood/10 p-4 text-bone">
+                <span className="flex items-center gap-2.5">
+                  <QrCode className="h-5 w-5 shrink-0 text-blood-bright" />
+                  <span className="heading-carved text-[0.62rem]">PIX à vista</span>
+                </span>
+                <span className="text-[0.65rem] text-parchment">5% de desconto já aplicado</span>
               </div>
 
               <div className="mt-6">
-                {method === 'pix' && <PixPanel payload={pixPayload} amount={pixTotal} />}
-
-                {method === 'cartao' && (
-                  <CardForm
-                    card={card}
-                    onChange={setCard}
-                    errors={errors}
-                    total={cartTotals.total}
-                  />
-                )}
-
-                {method === 'boleto' && (
-                  <div className="space-y-3 border border-smoke bg-pitch p-5">
-                    <Barcode className="h-8 w-8 text-blood-bright" />
-                    <p className="font-display text-lg font-bold text-bone tabular-nums">
-                      {money(cartTotals.total)}
+                <div className="flex items-start gap-4 border border-smoke bg-pitch p-5">
+                  <QrCode className="h-8 w-8 shrink-0 text-blood-bright" />
+                  <div>
+                    <p className="font-display text-lg font-bold text-bone">
+                      O PIX será gerado depois da criação do pedido
                     </p>
-                    <p className="text-[0.72rem] leading-relaxed text-parchment">
-                      O boleto é gerado ao confirmar o pedido e vence em 2 dias úteis.
-                      A compensação bancária leva até 3 dias úteis — só depois disso a
-                      peça entra em separação ou produção.
+                    <p className="mt-1 text-[0.72rem] leading-relaxed text-parchment">
+                      Ao continuar, o servidor reserva um identificador exclusivo e devolve o
+                      QR Code vinculado ao valor definitivo do seu pedido.
                     </p>
                   </div>
-                )}
+                </div>
 
                 {errors.pagamento && (
                   <div className="mt-4 border border-blood bg-blood/10 p-4 text-xs text-blood-bright">
@@ -639,17 +730,12 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                   {processing ? (
                     <>
                       <LoaderCircle className="h-4 w-4 animate-spin" />
-                      Processando pedido...
-                    </>
-                  ) : method === 'pix' ? (
-                    <>
-                      <Lock className="h-3.5 w-3.5" />
-                      Já paguei pelo PIX · Concluir pedido ({money(chargedTotal)})
+                      Criando pedido...
                     </>
                   ) : (
                     <>
                       <Lock className="h-3.5 w-3.5" />
-                      Confirmar pedido · {money(chargedTotal)}
+                      Criar pedido e gerar PIX · {money(pixTotal)}
                     </>
                   )}
                 </button>
@@ -719,35 +805,19 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                   {cartTotals.shipping === 0 ? 'Grátis' : money(cartTotals.shipping)}
                 </dd>
               </div>
-              {method === 'pix' && (
-                <div className="flex justify-between text-blood-bright">
-                  <dt>Desconto PIX</dt>
-                  <dd className="tabular-nums">
-                    −{money(cartTotals.total * PIX_DISCOUNT)}
-                  </dd>
-                </div>
-              )}
-              {method === 'cartao' && chosenInstallment && !chosenInstallment.interestFree && (
-                <div className="flex justify-between text-grave">
-                  <dt>Juros do parcelamento</dt>
-                  <dd className="tabular-nums">
-                    +{money(chosenInstallment.total - cartTotals.total)}
-                  </dd>
-                </div>
-              )}
+              <div className="flex justify-between text-blood-bright">
+                <dt>Desconto PIX</dt>
+                <dd className="tabular-nums">
+                  −{money(cartTotals.total - pixTotal)}
+                </dd>
+              </div>
 
               <div className="flex items-baseline justify-between border-t border-smoke pt-3 text-bone">
                 <dt className="heading-carved text-[0.62rem]">Total</dt>
                 <dd className="font-display text-2xl font-bold tabular-nums">
-                  {money(chargedTotal)}
+                  {money(pixTotal)}
                 </dd>
               </div>
-              {method === 'cartao' && chosenInstallment && (
-                <p className="text-right text-[0.65rem] text-grave tabular-nums">
-                  {chosenInstallment.count}x de {money(chosenInstallment.installmentValue)}
-                  {chosenInstallment.interestFree ? ' sem juros' : ''}
-                </p>
-              )}
             </dl>
           </div>
 
@@ -758,10 +828,9 @@ export function Checkout({ onBack }: { onBack: () => void }) {
           */}
           <p className="mt-3 flex items-start gap-2 text-[0.62rem] leading-relaxed text-dust">
             <Lock className="mt-0.5 h-3 w-3 shrink-0" />
-            Loja fictícia para demonstração: nenhuma cobrança real é feita.{' '}
             {mode === 'firebase'
-              ? 'Seus dados são gravados no nosso banco para registrar o pedido.'
-              : 'Nenhum dado sai do seu navegador.'}
+              ? 'Seus dados são enviados ao servidor para registrar o pedido. A cobrança PIX só é exibida depois que o pedido existe.'
+              : 'Modo de demonstração: nenhum dado sai do navegador e nenhuma cobrança PIX é gerada.'}
           </p>
         </aside>
       </div>
@@ -802,7 +871,15 @@ function Label({ text, error }: { text: string; error?: string }) {
 
 /* -------------------------------------------------------------------------- */
 
-function OrderConfirmation({ order, onBack }: { order: Order; onBack: () => void }) {
+function OrderConfirmation({
+  order,
+  mode,
+  onBack,
+}: {
+  order: Order;
+  mode: 'local' | 'firebase';
+  onBack: () => void;
+}) {
   const madeToOrder = order.lines.filter((line) => line.fulfillment === 'sob-encomenda');
   const maxProduction = madeToOrder.reduce(
     (max, line) => Math.max(max, line.productionDays ?? 0),
@@ -815,13 +892,11 @@ function OrderConfirmation({ order, onBack }: { order: Order; onBack: () => void
         <div className="panel-raised anim-rise p-8 text-center">
           <SkullMark className="mx-auto h-16 w-16 text-blood-bright" />
 
-          <h1 className="mt-5 font-logo text-3xl text-bone">Pedido selado</h1>
+          <h1 className="mt-5 font-logo text-3xl text-bone">Pedido criado</h1>
           <p className="mt-2 text-sm text-parchment">
-            {order.payment.method === 'pix'
-              ? 'Assim que o PIX compensar, sua peça entra em separação.'
-              : order.payment.method === 'boleto'
-                ? 'Enviamos o boleto para o seu e-mail. Vence em 2 dias úteis.'
-                : 'Pagamento aprovado. Sua peça já entrou na fila.'}
+            {order.payment.pixCode
+              ? 'Pague usando o código exclusivo abaixo. Assim que o PIX compensar, sua peça entra em separação.'
+              : 'Seu pedido foi registrado, mas nenhuma cobrança foi gerada.'}
           </p>
 
           <div className="mt-6 border border-smoke bg-pitch p-4">
@@ -829,18 +904,43 @@ function OrderConfirmation({ order, onBack }: { order: Order; onBack: () => void
             <p className="font-display text-2xl font-bold text-bone tabular-nums">{order.id}</p>
           </div>
 
+          {order.payment.pixCode ? (
+            <div className="mt-6 text-left">
+              <PixPanel payload={order.payment.pixCode} amount={order.total} />
+            </div>
+          ) : (
+            <div className="mt-6 border border-blood bg-blood/10 p-4 text-left text-xs text-blood-bright">
+              {mode === 'local'
+                ? 'Este pedido é apenas uma demonstração local e não gera cobrança PIX.'
+                : 'O pedido foi criado, mas o servidor não devolveu um código PIX. Não faça uma transferência avulsa; consulte o pedido novamente ou fale com o suporte.'}
+            </div>
+          )}
+
+          {order.customerAccessToken && (
+            <div className="mt-5 border border-smoke bg-pitch p-4 text-left">
+              <label
+                className="heading-carved text-[0.58rem] text-grave"
+                htmlFor="order-access-token"
+              >
+                Código de acesso ao pedido
+              </label>
+              <input
+                id="order-access-token"
+                readOnly
+                value={order.customerAccessToken}
+                onFocus={(event) => event.target.select()}
+                className="field mt-2 font-mono text-xs"
+              />
+              <p className="mt-2 text-[0.65rem] leading-relaxed text-grave">
+                Guarde este código. Ele será exigido junto com o número do pedido para
+                consultar status e rastreamento em outro dispositivo.
+              </p>
+            </div>
+          )}
+
           <dl className="mt-5 space-y-2 border-t border-smoke pt-5 text-left text-[0.72rem]">
-            <Row label="Total pago" value={money(order.total)} strong />
-            <Row
-              label="Pagamento"
-              value={
-                order.payment.method === 'cartao'
-                  ? `${order.payment.cardBrand} ···· ${order.payment.cardLast4} · ${order.payment.installments}x`
-                  : order.payment.method === 'pix'
-                    ? 'PIX à vista'
-                    : 'Boleto bancário'
-              }
-            />
+            <Row label="Total do pedido" value={money(order.total)} strong />
+            <Row label="Pagamento" value="PIX à vista" />
             <Row
               label="Entrega"
               value={`${order.address.city}/${order.address.state} · CEP ${order.address.cep}`}
@@ -867,7 +967,9 @@ function OrderConfirmation({ order, onBack }: { order: Order; onBack: () => void
         </div>
 
         <p className="mt-4 text-center text-[0.65rem] text-dust">
-          Acompanhe o pedido no painel administrativo, em Pedidos → {order.id}.
+          {order.customerAccessToken
+            ? `Acompanhe o pedido na Área do Cliente usando ${order.id} e seu código de acesso.`
+            : `Guarde o número ${order.id} e procure o suporte para acompanhar o pedido.`}
         </p>
       </div>
     </div>

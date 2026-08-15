@@ -7,33 +7,6 @@ import type { Product } from '../types';
  */
 export const SEED_PRODUCTS: Product[] = [
   {
-    id: 'p-teste-1real',
-    name: 'Camiseta Teste Oficial — R$ 1,00',
-    band: 'Camisetas Insanas',
-    category: 'Camiseta',
-    price: 1.0,
-    oldPrice: 149.9,
-    art: { sigil: 'pentagram', tone: 'blood', fabric: 'preto' },
-    photos: [],
-    tag: 'Teste PIX R$ 1,00',
-    rating: 5.0,
-    reviewsCount: 666,
-    description:
-      'Peça especial de teste no valor simbólico de R$ 1,00 para validação real de ponta a ponta do fluxo de pagamento PIX e confirmação.',
-    details: [
-      'Algodão 100% penteado 185g/m²',
-      'Valor especial de teste: R$ 1,00',
-      'Frete grátis para validação de pagamento',
-      'Pronta entrega para teste',
-    ],
-    fulfillment: 'pronta-entrega',
-    stock: { P: 100, M: 100, G: 100, GG: 100, XGG: 100 },
-    madeToOrderSizes: [],
-    lowStockThreshold: 10,
-    active: true,
-    createdAt: '2026-08-14T12:00:00.000Z',
-  },
-  {
     id: 'p-001',
     name: 'Nordlys Grav — Under Frossen Himmel',
     band: 'Nordlys Grav',

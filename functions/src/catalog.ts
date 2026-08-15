@@ -8,7 +8,7 @@ import { requirePermission } from './auth.js';
 const REGION = 'southamerica-east1';
 
 export const saveProduct = onCall({ region: REGION }, async (request) => {
-  requirePermission(request, 'products.edit');
+  await requirePermission(request, 'products.edit');
 
   const { id, product } = (request.data ?? {}) as { id?: string; product?: unknown };
   if (!id || typeof id !== 'string' || id.length > 120 || id.includes('/')) {
@@ -55,7 +55,7 @@ async function removeOrphanPhotos(productId: string, keep: string[]): Promise<vo
 }
 
 export const deleteProduct = onCall({ region: REGION }, async (request) => {
-  requirePermission(request, 'products.edit');
+  await requirePermission(request, 'products.edit');
 
   const { id } = (request.data ?? {}) as { id?: string };
   if (!id || typeof id !== 'string') {
@@ -80,7 +80,7 @@ export const deleteProduct = onCall({ region: REGION }, async (request) => {
  * necessariamente pode editar preço e descrição.
  */
 export const setStock = onCall({ region: REGION }, async (request) => {
-  requirePermission(request, 'stock.edit');
+  await requirePermission(request, 'stock.edit');
 
   const { productId, size, value, delta } = (request.data ?? {}) as {
     productId?: string;

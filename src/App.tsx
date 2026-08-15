@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { StoreProvider } from './store/StoreContext';
 import { Storefront } from './components/storefront/Storefront';
 import { SkullMark } from './components/art/Sigils';
+import { clearLegacyCustomerData } from './lib/customerOrders';
 
 const NecroCursor = lazy(() =>
   import('./components/NecroCursor').then((m) => ({ default: m.NecroCursor })),
@@ -31,6 +32,11 @@ function RouteFallback() {
 
 export function App() {
   const [route, setRoute] = useState<Route>(routeFromHash);
+
+  // Migração de privacidade: apaga PII salva por versões antigas assim que a loja abre.
+  useEffect(() => {
+    clearLegacyCustomerData();
+  }, []);
 
   // Sincroniza com voltar/avançar do navegador.
   useEffect(() => {

@@ -26,16 +26,14 @@ import type { OrderDraft, Result, StoreValue } from './types';
  */
 export function useLocalBackend(): StoreValue {
   const [products, setProducts] = usePersistentState<Product[]>('products', () => SEED_PRODUCTS);
-  const [orders, setOrders] = usePersistentState<Order[]>('orders', () =>
-    generateSeedOrders(Date.now()),
-  );
+  // Pedidos contêm CPF, telefone e endereço; no modo local ficam só em memória.
+  const [orders, setOrders] = useState<Order[]>(() => generateSeedOrders(Date.now()));
   const [users, setUsers] = usePersistentState<AdminUser[]>('users', () => SEED_USERS);
   const [coupons] = usePersistentState<Coupon[]>('coupons', () => SEED_COUPONS);
 
   const [cart, setCart] = usePersistentState<CartItem[]>('cart', []);
   const [couponCode, setCouponCode] = usePersistentState<string | null>('coupon', null);
   const [sessionId, setSessionId] = usePersistentState<string | null>('session', null);
-  const [orderSeq, setOrderSeq] = useState(0);
 
   const productById = useCallback(
     (id: string) => products.find((p) => p.id === id),
@@ -145,8 +143,15 @@ export function useLocalBackend(): StoreValue {
 
   const placeOrder = useCallback(
     async (draft: OrderDraft): Promise<Order> => {
+      if (draft.payment.method !== 'pix') {
+        throw new Error('No momento, o checkout aceita somente PIX.');
+      }
+
+      const orderId = `INS-${draft.idempotencyKey.replace(/[^a-zA-Z0-9]/g, '').slice(0, 12).toUpperCase()}`;
+      const existing = orders.find((order) => order.id === orderId);
+      if (existing) return existing;
+
       const createdAt = new Date().toISOString();
-      const method = draft.payment.method;
 
       const lines: OrderLine[] = cart.flatMap((item) => {
         const product = products.find((p) => p.id === item.productId);
@@ -167,11 +172,13 @@ export function useLocalBackend(): StoreValue {
         ];
       });
 
-      const pixDiscount = method === 'pix' ? cartTotals.total * PIX_DISCOUNT : 0;
-      const status: OrderStatus = method === 'cartao' ? 'pago' : 'aguardando-pagamento';
+      const pixDiscount = cartTotals.total * PIX_DISCOUNT;
+      const total = cartTotals.total - pixDiscount;
+      const status: OrderStatus = 'aguardando-pagamento';
 
       const order: Order = {
-        id: `INS-${20_000 + orderSeq + (Math.floor(Date.now() / 1000) % 10_000)}`,
+        id: orderId,
+        customerAccessToken: crypto.randomUUID(),
         createdAt,
         status,
         customer: draft.customer,
@@ -180,18 +187,12 @@ export function useLocalBackend(): StoreValue {
         subtotal: cartTotals.subtotal,
         discount: cartTotals.discount + pixDiscount,
         shipping: cartTotals.shipping,
-        total: cartTotals.total - pixDiscount,
-        payment: {
-          method,
-          installments: draft.payment.installments,
-          cardLast4: draft.payment.cardLast4,
-          cardBrand: draft.payment.cardBrand,
-        },
+        total,
+        payment: { method: 'pix' },
         coupon: draft.coupon,
         history: [{ status, at: createdAt }],
       };
 
-      setOrderSeq((n) => n + 1);
       setOrders((previous) => [order, ...previous]);
 
       // Só pronta-entrega baixa estoque; sob encomenda entra na fila de produção.
@@ -212,7 +213,7 @@ export function useLocalBackend(): StoreValue {
 
       return order;
     },
-    [cart, products, cartTotals, orderSeq, setOrders, setProducts],
+    [cart, products, cartTotals, orders, setOrders, setProducts],
   );
 
   const updateOrderStatus = useCallback(
@@ -249,15 +250,16 @@ export function useLocalBackend(): StoreValue {
   );
 
   const lookupOrders = useCallback(
-    async (query: string): Promise<Order[]> => {
-      const q = query.trim().toLowerCase();
-      const cleanCpf = query.replace(/\D/g, '');
-      return orders.filter((order) => {
-        if (order.id.toLowerCase() === q) return true;
-        if (order.customer.email.toLowerCase() === q) return true;
-        if (order.customer.cpf.replace(/\D/g, '') === cleanCpf && cleanCpf.length > 5) return true;
-        return false;
-      });
+    async (orderId: string, accessToken?: string): Promise<Order[]> => {
+      const normalizedId = orderId.trim().toLowerCase();
+      const normalizedToken = accessToken?.trim();
+      if (!normalizedId || !normalizedToken) return [];
+
+      return orders.filter(
+        (order) =>
+          order.id.toLowerCase() === normalizedId &&
+          order.customerAccessToken === normalizedToken,
+      );
     },
     [orders],
   );

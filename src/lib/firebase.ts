@@ -25,6 +25,7 @@ export const isFirebaseConfigured = Boolean(config.apiKey && config.projectId);
 
 /** Emuladores locais: ligados por `VITE_USE_EMULATORS=true` no `.env.local`. */
 const useEmulators = import.meta.env.VITE_USE_EMULATORS === 'true';
+export const isUsingFirebaseEmulators = useEmulators;
 
 let appPromise: Promise<FirebaseApp> | null = null;
 
@@ -35,7 +36,20 @@ export function ensureApp(): Promise<FirebaseApp> {
     );
   }
   if (!appPromise) {
-    appPromise = import('firebase/app').then((m) => m.initializeApp(config));
+    appPromise = import('firebase/app').then(async (m) => {
+      const app = m.initializeApp(config);
+      const siteKey = import.meta.env.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY;
+      if (siteKey && !useEmulators) {
+        const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import(
+          'firebase/app-check'
+        );
+        initializeAppCheck(app, {
+          provider: new ReCaptchaEnterpriseProvider(siteKey),
+          isTokenAutoRefreshEnabled: true,
+        });
+      }
+      return app;
+    });
   }
   return appPromise;
 }

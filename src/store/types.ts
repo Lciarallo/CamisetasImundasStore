@@ -28,14 +28,11 @@ export interface Result {
 
 /** Dados que o checkout envia. Preço e total ficam de fora de propósito. */
 export interface OrderDraft {
+  /** Estável durante uma tentativa de checkout; impede pedidos duplicados em retries. */
+  idempotencyKey: string;
   customer: Order['customer'];
   address: Order['address'];
-  payment: {
-    method: Order['payment']['method'];
-    installments: number;
-    cardLast4?: string;
-    cardBrand?: string;
-  };
+  payment: { method: 'pix' };
   coupon?: string;
 }
 
@@ -78,7 +75,7 @@ export interface StoreValue {
   placeOrder: (draft: OrderDraft) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<Result>;
   setTrackingCode: (orderId: string, code: string) => Promise<Result>;
-  lookupOrders: (query: string) => Promise<Order[]>;
+  lookupOrders: (orderId: string, accessToken?: string) => Promise<Order[]>;
 
   saveProduct: (product: Product) => Promise<Result>;
   deleteProduct: (productId: string) => Promise<Result>;

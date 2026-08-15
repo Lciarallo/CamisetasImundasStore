@@ -15,6 +15,20 @@ const REGION = 'southamerica-east1';
  * uso ela se fecha sozinha e passa a recusar qualquer chamada.
  */
 export const bootstrap = onCall({ region: REGION }, async (request) => {
+  // A criação pública do primeiro Mestre é aceitável apenas no emulador. Em
+  // produção, "o primeiro a chamar vence" permitiria tomada total de uma
+  // instalação nova; o usuário inicial deve ser provisionado por canal
+  // administrativo confiável (Firebase Admin/Console).
+  if (
+    process.env.FUNCTIONS_EMULATOR !== 'true' &&
+    !process.env.FIREBASE_EMULATOR_HUB
+  ) {
+    throw new HttpsError(
+      'failed-precondition',
+      'A instalação pública está desativada. Provisione o primeiro Mestre por um canal administrativo.',
+    );
+  }
+
   const db = getFirestore();
   const auth = getAuth();
 
@@ -34,21 +48,14 @@ export const bootstrap = onCall({ region: REGION }, async (request) => {
     throw new HttpsError('invalid-argument', 'Nome inválido.');
   }
 
-  // A conta pode já existir no Auth sem perfil no Firestore — por exemplo se
-  // um bootstrap anterior falhou no meio. Reaproveitar evita travar aí.
-  let uid: string;
-  try {
-    const found = await auth.getUserByEmail(email);
-    uid = found.uid;
-    await auth.updateUser(uid, { password, displayName: name.trim(), disabled: false });
-  } catch {
-    const created = await auth.createUser({
-      email,
-      password,
-      displayName: name.trim(),
-    });
-    uid = created.uid;
-  }
+  // Nunca redefina a senha de uma conta preexistente a partir deste endpoint.
+  // Mesmo no emulador, colisão de e-mail deve falhar de forma explícita.
+  const created = await auth.createUser({
+    email,
+    password,
+    displayName: name.trim(),
+  });
+  const uid = created.uid;
 
   const doc: AdminUserDoc = {
     name: name.trim(),
@@ -96,7 +103,7 @@ export const bootstrap = onCall({ region: REGION }, async (request) => {
  * validar. As peças passam pela mesma sanitização do CRUD normal.
  */
 export const seedCatalog = onCall({ region: REGION }, async (request) => {
-  requirePermission(request, 'products.edit');
+  await requirePermission(request, 'products.edit');
 
   const { products, coupons, replace } = (request.data ?? {}) as {
     products?: { id: string; product: unknown }[];

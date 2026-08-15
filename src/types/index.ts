@@ -29,7 +29,7 @@ export const CATEGORIES: Category[] = [
  */
 export type FulfillmentMode = 'pronta-entrega' | 'sob-encomenda';
 
-export type ProductTag = 'Lançamento' | 'Clássico' | 'Última Peça' | 'Reissue' | 'Teste PIX R$ 1,00';
+export type ProductTag = 'Lançamento' | 'Clássico' | 'Última Peça' | 'Reissue';
 
 /**
  * A arte de cada peça é desenhada em SVG, não fotografada — o visual fica
@@ -119,7 +119,12 @@ export interface CartItem {
 /* Pedidos                                                                    */
 /* -------------------------------------------------------------------------- */
 
-export type PaymentMethod = 'pix' | 'cartao' | 'boleto';
+/**
+ * A loja cobra exclusivamente por PIX à vista. Cartão e boleto exigiriam
+ * guardar dado de portador ou conciliar registro bancário — responsabilidades
+ * que só se justificam com um PSP dedicado, e que não existem aqui.
+ */
+export type PaymentMethod = 'pix';
 
 export type OrderStatus =
   | 'aguardando-pagamento'
@@ -180,6 +185,8 @@ export interface Customer {
 
 export interface Order {
   id: string;
+  /** Entregue somente na criação do pedido para consultas públicas autenticadas. */
+  customerAccessToken?: string;
   createdAt: string;
   status: OrderStatus;
   customer: Customer;
@@ -191,11 +198,7 @@ export interface Order {
   total: number;
   payment: {
     method: PaymentMethod;
-    /** Parcelas — 1 para PIX/boleto. */
-    installments: number;
-    /** Últimos 4 dígitos, quando cartão. Nunca guardamos o número inteiro. */
-    cardLast4?: string;
-    cardBrand?: string;
+    /** BR Code da cobrança, devolvido pelo servidor depois de o pedido existir. */
     pixCode?: string;
   };
   coupon?: string;

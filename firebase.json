@@ -9,7 +9,7 @@
         "headers": [
           {
             "key": "Content-Security-Policy",
-            "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://apis.google.com https://*.firebaseapp.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://*.firebaseapp.com https://camisetas-imundas-store.firebasestorage.app https://camisetas-imundas-store.appspot.com; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net https://*.firebaseapp.com https://southamerica-east1-camisetas-imundas-store.cloudfunctions.net wss://*.firebaseio.com https://*.run.app; frame-src 'self' https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self';"
+            "value": "default-src 'self'; script-src 'self' 'sha256-OpO3AIlmw62TQrU5eLgsLc9ABr2vLTE4hFX3LFHe8fc=' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://camisetas-imundas-store.firebasestorage.app https://camisetas-imundas-store.appspot.com; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com wss://firestore.googleapis.com https://firebasestorage.googleapis.com https://firebaseappcheck.googleapis.com https://camisetas-imundas-store.firebaseapp.com https://southamerica-east1-camisetas-imundas-store.cloudfunctions.net https://www.google.com/recaptcha/ https://viacep.com.br; frame-src 'self' https://camisetas-imundas-store.firebaseapp.com https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests;"
           },
           {
             "key": "Strict-Transport-Security",
@@ -30,6 +30,10 @@
           {
             "key": "Permissions-Policy",
             "value": "camera=(), microphone=(), geolocation=(), payment=()"
+          },
+          {
+            "key": "Cross-Origin-Opener-Policy",
+            "value": "same-origin-allow-popups"
           }
         ]
       },

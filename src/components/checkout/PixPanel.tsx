@@ -69,7 +69,8 @@ export function PixPanel({ payload, amount }: { payload: string; amount: number 
           </ol>
 
           <p className="border-t border-smoke/70 pt-2 text-[0.62rem] text-dust">
-            Beneficiário: <strong className="text-bone">LUIZ EDUARDO CIARALLO</strong> · CNPJ: <span className="font-mono text-parchment">68.510.540/0001-59</span>
+            Antes de confirmar, confira no aplicativo do banco o recebedor e o valor.
+            Nunca altere o código nem faça uma transferência avulsa.
           </p>
         </div>
       </div>

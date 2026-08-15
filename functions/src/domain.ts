@@ -11,7 +11,13 @@ export type Size = 'P' | 'M' | 'G' | 'GG' | 'XGG';
 export const SIZES: Size[] = ['P', 'M', 'G', 'GG', 'XGG'];
 
 export type FulfillmentMode = 'pronta-entrega' | 'sob-encomenda';
-export type PaymentMethod = 'pix' | 'cartao' | 'boleto';
+
+/**
+ * A loja cobra exclusivamente por PIX à vista. Cartão e boleto exigiriam
+ * guardar dado de portador ou conciliar registro bancário — responsabilidades
+ * que só se justificam com um PSP dedicado, e que não existem aqui.
+ */
+export type PaymentMethod = 'pix';
 
 export type OrderStatus =
   | 'aguardando-pagamento'
@@ -78,25 +84,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 export const FREE_SHIPPING_THRESHOLD = 299;
 export const SHIPPING_COST = 24.9;
 export const PIX_DISCOUNT = 0.05;
-export const MAX_INSTALLMENTS = 12;
-export const INTEREST_FREE_INSTALLMENTS = 6;
-export const MONTHLY_INTEREST = 0.0199;
 
 /** Teto por linha, para um pedido forjado não zerar o estoque de uma vez. */
 export const MAX_QUANTITY_PER_LINE = 10;
 export const MAX_LINES_PER_ORDER = 20;
-
-/**
- * Valor total do parcelamento. Até a 6ª é divisão simples; a partir da 7ª,
- * tabela Price. Precisa existir aqui porque o cliente informa só o número de
- * parcelas — o valor cobrado é decidido no servidor.
- */
-export function installmentTotal(total: number, count: number): number {
-  if (count <= INTEREST_FREE_INSTALLMENTS) return total;
-  const i = MONTHLY_INTEREST;
-  const installment = (total * i) / (1 - Math.pow(1 + i, -count));
-  return installment * count;
-}
 
 /** Dinheiro sempre com 2 casas; evita 0.1 + 0.2 vazando para o total. */
 export const round2 = (value: number) => Math.round(value * 100) / 100;

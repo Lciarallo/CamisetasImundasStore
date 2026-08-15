@@ -21,13 +21,19 @@ service cloud.firestore {
     /** O usuário tem o privilégio pedido? */
     function can(permission) {
       return signedIn()
-        && request.auth.token.perms is list
-        && permission in request.auth.token.perms;
+        && activeStaff()
+        && get(
+          /databases/$(database)/documents/adminUsers/$(request.auth.uid)
+        ).data.permissions is list
+        && permission in get(
+          /databases/$(database)/documents/adminUsers/$(request.auth.uid)
+        ).data.permissions;
     }
 
     /** Conta desativada perde tudo, mesmo com claim antiga em cache. */
     function activeStaff() {
-      return signedIn() && request.auth.token.active == true;
+      return signedIn()
+        && get(/databases/$(database)/documents/adminUsers/$(request.auth.uid)).data.active == true;
     }
 
     /* ---------------------------------------------------------------- */
@@ -93,6 +99,20 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
+      allow read, write: if false;
+    }
+
+    // Metadados internos de idempotência e limitação de abuso nunca são
+    // expostos ao SDK do navegador.
+    match /orderRequests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /rateLimits/{bucketId} {
+      allow read, write: if false;
+    }
+
+    match /paymentEvents/{eventId} {
       allow read, write: if false;
     }
 

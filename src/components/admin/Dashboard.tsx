@@ -160,19 +160,16 @@ export function Dashboard({ onNavigate }: { onNavigate: (tab: string) => void })
         />
       </div>
 
+      {/*
+        Não há "faturamento por forma de pagamento": a loja cobra só por PIX,
+        e uma barra de fatia única não informa nada.
+      */}
       {showFinance && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <SplitBar
-            title="Faturamento por forma de pagamento"
-            data={data.paymentSplit}
-            formatValue={money}
-          />
-          <SplitBar
-            title="Pronta-entrega x sob encomenda"
-            data={data.fulfillmentSplit}
-            formatValue={money}
-          />
-        </div>
+        <SplitBar
+          title="Pronta-entrega x sob encomenda"
+          data={data.fulfillmentSplit}
+          formatValue={money}
+        />
       )}
 
       {/* Status dos pedidos */}

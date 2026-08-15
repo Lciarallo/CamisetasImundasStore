@@ -20,28 +20,33 @@ export interface StaffClaims {
 }
 
 /** Exige um usuário autenticado com o privilégio pedido. */
-export function requirePermission(
+export async function requirePermission(
   request: CallableRequest,
   permission: Permission,
-): { uid: string; claims: StaffClaims } {
+): Promise<{ uid: string; claims: StaffClaims }> {
   const uid = request.auth?.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Faça login para continuar.');
   }
 
-  const token = request.auth?.token as unknown as Partial<StaffClaims> | undefined;
-  const perms = Array.isArray(token?.perms) ? token.perms : [];
+  // Claims aceleram a interface, mas podem ficar em cache depois de uma
+  // revogação. Operações privilegiadas consultam o perfil atual para que
+  // desativação/corte de permissão tenha efeito imediato.
+  const snap = await getFirestore().collection('adminUsers').doc(uid).get();
+  if (!snap.exists) {
+    throw new HttpsError('permission-denied', 'Esta conta não pertence à equipe.');
+  }
+  const profile = snap.data() as AdminUserDoc;
+  const perms = Array.isArray(profile.permissions) ? profile.permissions : [];
 
-  // Conta desativada mantém o token válido até expirar; a checagem explícita
-  // é o que impede alguém banido de continuar operando com o token em mãos.
-  if (token?.active !== true) {
+  if (profile.active !== true) {
     throw new HttpsError('permission-denied', 'Esta conta está desativada.');
   }
   if (!perms.includes(permission)) {
     throw new HttpsError('permission-denied', `Falta o privilégio "${permission}".`);
   }
 
-  return { uid, claims: { role: token.role as Role, perms, active: true } };
+  return { uid, claims: { role: profile.role as Role, perms, active: true } };
 }
 
 /** Nome de quem executou a ação, para a trilha de auditoria. */

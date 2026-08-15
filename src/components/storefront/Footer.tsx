@@ -1,4 +1,4 @@
-import { CreditCard, DiscAlbum, Hammer, Package, RadioTower, ShieldCheck } from 'lucide-react';
+import { DiscAlbum, Hammer, Package, QrCode, RadioTower, ShieldCheck } from 'lucide-react';
 import { BrandLogo } from '../art/BrandLogo';
 
 const COLUMNS: { title: string; links: string[] }[] = [
@@ -25,7 +25,7 @@ export function Footer({ onOpenCustomerPortal }: { onOpenCustomerPortal?: () => 
           {[
             { icon: Package, title: 'Frete grátis', text: 'Acima de R$ 299 para todo o Brasil' },
             { icon: Hammer, title: 'Sob encomenda', text: 'Peça esgotada? Produzimos para você' },
-            { icon: CreditCard, title: 'Até 12x', text: '6x sem juros no cartão · 5% off no PIX' },
+            { icon: QrCode, title: 'PIX à vista', text: '5% de desconto com código exclusivo' },
             { icon: ShieldCheck, title: 'Compra segura', text: 'Dados criptografados e nota fiscal' },
           ].map(({ icon: Icon, title, text }) => (
             <li key={title} className="flex items-start gap-3 bg-pitch px-5 py-6">
@@ -56,7 +56,7 @@ export function Footer({ onOpenCustomerPortal }: { onOpenCustomerPortal?: () => 
           </p>
           <ol className="mt-10 grid gap-px bg-smoke text-left sm:grid-cols-3">
             {[
-              ['I', 'Você encomenda', 'Escolhe tamanho e paga normalmente, por PIX ou cartão.'],
+              ['I', 'Você encomenda', 'Escolhe o tamanho e conclui o pagamento por PIX.'],
               ['II', 'Entramos em produção', 'A peça vai para a fila de serigrafia com seu nome.'],
               ['III', 'Despachamos', 'Você recebe o código de rastreio assim que sair da oficina.'],
             ].map(([numeral, title, text]) => (
@@ -137,17 +137,7 @@ export function Footer({ onOpenCustomerPortal }: { onOpenCustomerPortal?: () => 
       <div className="border-t border-smoke">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-[0.68rem] text-grave md:flex-row md:px-8">
           <p>© 2026 Camisetas Insanas · CNPJ 68.510.540/0001-59</p>
-          <p className="flex items-center gap-3 text-grave">
-            <span>PIX</span>
-            <span>·</span>
-            <span>Visa</span>
-            <span>·</span>
-            <span>Mastercard</span>
-            <span>·</span>
-            <span>Elo</span>
-            <span>·</span>
-            <span>Boleto</span>
-          </p>
+          <p className="text-grave">Pagamento disponível: PIX</p>
         </div>
       </div>
     </footer>

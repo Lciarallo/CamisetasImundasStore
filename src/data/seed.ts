@@ -4,7 +4,6 @@ import type {
   Order,
   OrderLine,
   OrderStatus,
-  PaymentMethod,
   Product,
   Size,
 } from '../types';
@@ -139,22 +138,6 @@ function statusForAge(random: () => number, daysAgo: number): OrderStatus {
   return roll > 0.35 ? 'pago' : 'aguardando-pagamento';
 }
 
-const PAYMENT_WEIGHTS: [PaymentMethod, number][] = [
-  ['pix', 0.55],
-  ['cartao', 0.36],
-  ['boleto', 0.09],
-];
-
-function paymentFor(random: () => number): PaymentMethod {
-  const roll = random();
-  let acc = 0;
-  for (const [method, weight] of PAYMENT_WEIGHTS) {
-    acc += weight;
-    if (roll <= acc) return method;
-  }
-  return 'pix';
-}
-
 export const FREE_SHIPPING_THRESHOLD = 299;
 export const SHIPPING_COST = 24.9;
 
@@ -189,7 +172,6 @@ export function generateSeedOrders(now: number, count = 78): Order[] {
     const discount = coupon ? subtotal * 0.1 : 0;
     const shipping = subtotal - discount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
     const status = statusForAge(random, daysAgo);
-    const method = paymentFor(random);
     const [city, state] = pick(random, CITIES);
     const name = `${pick(random, FIRST_NAMES)} ${pick(random, LAST_NAMES)}`;
 
@@ -235,12 +217,7 @@ export function generateSeedOrders(now: number, count = 78): Order[] {
       discount,
       shipping,
       total: subtotal - discount + shipping,
-      payment: {
-        method,
-        installments: method === 'cartao' ? pick(random, [1, 2, 3, 6, 10, 12]) : 1,
-        cardLast4: method === 'cartao' ? String(randomInt(random, 1000, 9999)) : undefined,
-        cardBrand: method === 'cartao' ? pick(random, ['Visa', 'Mastercard', 'Elo']) : undefined,
-      },
+      payment: { method: 'pix' },
       coupon,
       trackingCode:
         status === 'enviado' || status === 'entregue'

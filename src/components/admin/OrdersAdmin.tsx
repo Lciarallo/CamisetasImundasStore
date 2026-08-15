@@ -36,7 +36,7 @@ export function StatusPill({ status }: { status: OrderStatus }) {
 }
 
 export function OrdersAdmin() {
-  const { orders, updateOrderStatus, setTrackingCode, can } = useStore();
+  const { orders, updateOrderStatus, setTrackingCode, can, session } = useStore();
 
   const [filter, setFilter] = useState<OrderStatus | 'todos'>('todos');
   const [search, setSearch] = useState('');
@@ -144,13 +144,7 @@ export function OrdersAdmin() {
                         />
                       )}
                     </td>
-                    <td className="px-4 py-3 text-[0.65rem] text-grave">
-                      {order.payment.method === 'cartao'
-                        ? `${order.payment.cardBrand} ${order.payment.installments}x`
-                        : order.payment.method === 'pix'
-                          ? 'PIX'
-                          : 'Boleto'}
-                    </td>
+                    <td className="px-4 py-3 text-[0.65rem] text-grave">PIX</td>
                     <td className="px-4 py-3">
                       <StatusPill status={order.status} />
                     </td>
@@ -177,6 +171,7 @@ export function OrdersAdmin() {
         <OrderDetail
           order={current}
           editable={editable}
+          canConfirmPayment={session?.role === 'mestre'}
           onClose={() => setSelected(null)}
           onStatus={(status) => void updateOrderStatus(current.id, status)}
           onTracking={(code) => void setTrackingCode(current.id, code)}
@@ -191,12 +186,14 @@ export function OrdersAdmin() {
 function OrderDetail({
   order,
   editable,
+  canConfirmPayment,
   onClose,
   onStatus,
   onTracking,
 }: {
   order: Order;
   editable: boolean;
+  canConfirmPayment: boolean;
   onClose: () => void;
   onStatus: (status: OrderStatus) => void;
   onTracking: (code: string) => void;
@@ -242,15 +239,17 @@ function OrderDetail({
                   const done = index <= currentIndex;
                   // Só avança um degrau por vez — evita pular "pago" e ir para "enviado".
                   const next = index === currentIndex + 1;
+                  const allowedNext =
+                    editable && next && (status !== 'pago' || canConfirmPayment);
                   return (
                     <button
                       key={status}
-                      disabled={!editable || (!next && !done)}
+                      disabled={!allowedNext}
                       onClick={() => onStatus(status)}
                       className={`tag transition-colors ${
                         done
                           ? 'border-blood bg-blood text-bone'
-                          : next && editable
+                          : allowedNext
                             ? 'border-iron text-parchment hover:border-blood hover:text-blood-bright'
                             : 'border-smoke text-dust'
                       }`}
@@ -262,7 +261,7 @@ function OrderDetail({
               </div>
             )}
 
-            {editable && order.status !== 'cancelado' && order.status !== 'entregue' && (
+            {editable && order.status === 'aguardando-pagamento' && (
               <button
                 onClick={() => onStatus('cancelado')}
                 className="mt-3 text-[0.62rem] text-dust hover:text-ember"
@@ -359,16 +358,7 @@ function OrderDetail({
                   {money(order.total)}
                 </dd>
               </div>
-              <Row
-                label="Pagamento"
-                value={
-                  order.payment.method === 'cartao'
-                    ? `${order.payment.cardBrand} ···· ${order.payment.cardLast4} · ${order.payment.installments}x`
-                    : order.payment.method === 'pix'
-                      ? 'PIX'
-                      : 'Boleto'
-                }
-              />
+              <Row label="Pagamento" value="PIX à vista" />
             </dl>
           </section>
 

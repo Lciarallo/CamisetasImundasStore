@@ -41,7 +41,6 @@ export interface DashboardData {
   dailySpark: number[];
   topProducts: { label: string; sublabel: string; value: number }[];
   topBands: { label: string; value: number }[];
-  paymentSplit: { label: string; value: number }[];
   fulfillmentSplit: { label: string; value: number }[];
   statusCounts: Record<OrderStatus, number>;
   pendingProduction: Order[];
@@ -120,12 +119,6 @@ export function buildDashboard(
     .slice(0, 5)
     .map(([label, value]) => ({ label, value }));
 
-  /* Pagamentos ------------------------------------------------------------ */
-  const payments = { pix: 0, cartao: 0, boleto: 0 };
-  for (const order of inWindow.filter(isRevenue)) {
-    payments[order.payment.method] += order.total;
-  }
-
   /* Status ---------------------------------------------------------------- */
   const statusCounts: Record<OrderStatus, number> = {
     'aguardando-pagamento': 0,
@@ -158,11 +151,6 @@ export function buildDashboard(
     dailySpark: daily.map((point) => point.value),
     topProducts,
     topBands,
-    paymentSplit: [
-      { label: 'PIX', value: payments.pix },
-      { label: 'Cartão de crédito', value: payments.cartao },
-      { label: 'Boleto', value: payments.boleto },
-    ],
     fulfillmentSplit: [
       { label: 'Pronta-entrega', value: readyToShip },
       { label: 'Sob encomenda', value: madeToOrder },

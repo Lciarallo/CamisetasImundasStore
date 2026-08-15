@@ -12,9 +12,15 @@ service firebase.storage {
 
     function can(permission) {
       return request.auth != null
-        && request.auth.token.active == true
-        && request.auth.token.perms is list
-        && permission in request.auth.token.perms;
+        && firestore.get(
+          /databases/(default)/documents/adminUsers/$(request.auth.uid)
+        ).data.active == true
+        && firestore.get(
+          /databases/(default)/documents/adminUsers/$(request.auth.uid)
+        ).data.permissions is list
+        && permission in firestore.get(
+          /databases/(default)/documents/adminUsers/$(request.auth.uid)
+        ).data.permissions;
     }
 
     match /products/{productId}/{fileName} {

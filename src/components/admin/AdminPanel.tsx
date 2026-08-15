@@ -62,7 +62,13 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
   }, []);
 
   // As abas visíveis dependem dos privilégios da conta logada.
-  const allowed = useMemo(() => TABS.filter((item) => can(item.permission)), [can]);
+  const allowed = useMemo(
+    () =>
+      TABS.filter(
+        (item) => can(item.permission) && (item.key !== 'nubank' || session?.role === 'mestre'),
+      ),
+    [can, session?.role],
+  );
 
   // Se a aba atual sumiu (troca de conta, privilégio revogado), cai na primeira.
   useEffect(() => {
