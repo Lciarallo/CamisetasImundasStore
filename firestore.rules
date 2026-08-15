@@ -116,6 +116,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Dinheiro que chegou sem pedido apto a recebê-lo. Só o Mestre lê, e
+    // ninguém escreve pelo cliente: quem grava é a função, via Admin SDK.
+    match /unreconciledPayments/{paymentId} {
+      allow read: if activeStaff() && request.auth.token.role == 'mestre';
+      allow write: if false;
+    }
+
     // Qualquer coleção não declarada acima fica terminantemente fechada.
     match /{document=**} {
       allow read, write: if false;

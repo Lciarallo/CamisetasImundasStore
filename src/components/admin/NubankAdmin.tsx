@@ -179,7 +179,7 @@ export function NubankAdmin() {
         <h3 className="heading-carved text-xs text-bone">Configurações da Conexão Nubank PJ</h3>
         <p className="mt-1 text-xs text-dust">
           O robô só verifica o extrato quando o Mestre aciona a sincronização e recusa
-          correspondências ambíguas. Pedidos Mercado Pago são confirmados pelo webhook oficial.
+          correspondências ambíguas. Pedidos novos são confirmados pelo webhook do Inter.
         </p>
 
         <div className="mt-6 space-y-4">

@@ -9,7 +9,7 @@ privilégios e gestão de estoque.
 **No ar:** https://camisetas-imundas-store.web.app
 
 > ⚠️ As bandas são fictícias. O modo local não gera cobrança; uma implantação
-> Firebase com Mercado Pago configurado processa PIX real.
+> Firebase com o Banco Inter configurado processa PIX real.
 
 ---
 
@@ -59,7 +59,7 @@ dedicado, e oferecer o botão desabilitado só anunciaria uma promessa vazia.
 
 | Recurso | Detalhe |
 |---|---|
-| **PIX** | Cobrança dinâmica criada no servidor pelo Mercado Pago, com expiração e 5% de desconto à vista. |
+| **PIX** | Cobrança dinâmica criada no servidor pelo Banco Inter, com expiração imposta pelo banco e 5% de desconto à vista. |
 | **Entrega** | Busca de endereço por CEP via ViaCEP, com preenchimento manual se a API cair. |
 | **Validação** | CPF com dígitos verificadores, e-mail, telefone e CEP. |
 
@@ -83,8 +83,8 @@ nunca por uma função pública (ver [Backend](#-backend-firebase)).
 
 - **Painel**: faturamento, pedidos, ticket médio e peças vendidas com variação
   contra o período anterior; série diária com crosshair; ranking de peças e
-  bandas; divisão por forma de pagamento e por modo de fornecimento; alertas de
-  estoque baixo e fila de produção. Recortes de 7, 30 e 90 dias.
+  bandas; divisão por modo de fornecimento; alertas de estoque baixo e fila de
+  produção. Recortes de 7, 30 e 90 dias.
 - **Pedidos**: busca, filtro por status, esteira que avança um degrau por vez,
   código de rastreio, timeline de alterações e detalhamento de valores.
 - **Estoque**: grade por tamanho com ajuste fino, alerta de mínimo e separação
@@ -164,19 +164,95 @@ manda só o que quer comprar e para onde enviar.
 
 ### Pagamento
 
-Produção usa **PIX dinâmico do Mercado Pago**. O servidor cria a cobrança com o
-total que acabou de recalcular, uma chave idempotente e expiração de 30 minutos.
-O webhook valida o manifesto HMAC oficial, consulta o pagamento no provedor e só
-confirma quando pedido, referência, método, moeda e valor coincidem. A mesma
-transação não pode quitar dois pedidos.
+Produção usa **PIX dinâmico do Banco Inter**, pela API Pix do Banco Central.
+Receber PIX na conta PJ não tem tarifa, e a API é oficial — não depende de
+sessão do app nem de token que expira sozinho.
 
-O BR Code direto existe apenas no emulador e usa uma chave deliberadamente não
-pagável. Isso evita que um QR estático continue recebendo dinheiro depois de a
-reserva expirar.
+O servidor cria a cobrança com o total que acabou de recalcular e expiração de
+30 minutos. **A expiração é imposta pelo banco**, e é isso que separa esta
+solução de um BR Code para chave própria: passado o prazo, o Inter recusa o
+pagamento, então a reserva de estoque que vence não deixa para trás um QR Code
+que continua cobrando.
 
-A conciliação Nubank foi mantida apenas para pedidos PIX direto legados. É manual,
-exclusiva do Mestre, usa `NUBANK_ACCESS_TOKEN` no Secret Manager e recusa
-correspondências ambíguas; pedidos novos do Mercado Pago usam o webhook oficial.
+O `txid` é derivado do número do pedido de forma determinística, o que faz o
+`PUT` ser idempotente: repetir a mesma cobrança devolve a mesma, nunca uma
+segunda. O trecho de hash no fim também funciona como assinatura — um `txid`
+inventado não volta a virar pedido.
+
+**O webhook é aviso, não prova.** Qualquer um pode fazer POST na URL, então a
+notificação só serve para dizer *qual* cobrança olhar; quem confirma o pagamento
+é a leitura que o servidor faz no Inter com as próprias credenciais. Um POST
+forjado, no pior caso, faz o servidor reler uma cobrança e concluir que ela não
+foi paga.
+
+Dinheiro que chega para um pedido que não pode recebê-lo — vencido, cancelado ou
+com outro valor — vai para `unreconciledPayments` em vez de virar um log e sumir.
+Só o Mestre lê a lista, e a escrita é exclusiva das funções.
+
+Como a API Pix é padronizada pelo BACEN, o mesmo código atende Efí, Sicoob ou BB:
+muda URL, credencial e escopo, não a lógica.
+
+Por que **não** um robô que lê o extrato do banco: a conciliação por raspagem de
+sessão depende de um token pessoal que expira em silêncio, forja `User-Agent` e
+`Origin` contra endpoints internos, e não emite cobrança com vencimento real —
+ou seja, não resolve o problema do QR Code que sobrevive à reserva. O
+`nubankGateway` segue no código apenas para pedidos PIX direto legados: é manual,
+exclusivo do Mestre e recusa correspondências ambíguas.
+
+#### Configurando o Inter
+
+Tudo abaixo é feito uma vez, no Internet Banking PJ e no terminal.
+
+1. **Crie a aplicação.** No Internet Banking do Inter (perfil PJ), vá em
+   *Aplicações → Nova aplicação*, marque o escopo de **Pix Cobrança** e conclua.
+   Você recebe `Client ID` e `Client Secret`, e baixa um `.crt` e um `.key` — o
+   certificado de cliente (mTLS). O Inter só conversa com quem apresenta esse par.
+
+2. **Cadastre a chave PIX** que vai receber (a mesma conta da aplicação).
+
+3. **Guarde tudo no Secret Manager.** Nunca em `.env`, nunca no Firestore:
+
+   ```bash
+   firebase functions:secrets:set INTER_CLIENT_ID
+   firebase functions:secrets:set INTER_CLIENT_SECRET
+   firebase functions:secrets:set INTER_PIX_KEY
+
+   # Os PEM inteiros, incluindo as linhas BEGIN/END:
+   firebase functions:secrets:set INTER_CERTIFICATE < certificado.crt
+   firebase functions:secrets:set INTER_PRIVATE_KEY < chave.key
+   ```
+
+   Se colar o PEM à mão e as quebras de linha virarem `\n` literais, o código
+   normaliza — mas o `<` acima evita o problema de origem.
+
+4. **Publique as funções** e pegue a URL do webhook:
+
+   ```bash
+   firebase deploy --only functions
+   # https://southamerica-east1-SEU-PROJETO.cloudfunctions.net/paymentWebhook
+   ```
+
+5. **Registre o webhook no Inter**, associando à sua chave PIX. Pelo próprio
+   Internet Banking, ou pela API:
+
+   ```bash
+   curl --cert certificado.crt --key chave.key \
+     -X PUT "https://cdpj.partners.bancointer.com.br/pix/v2/webhook/SUA-CHAVE-PIX" \
+     -H "Authorization: Bearer SEU_TOKEN" -H "Content-Type: application/json" \
+     -d '{"webhookUrl":"https://southamerica-east1-SEU-PROJETO.cloudfunctions.net/paymentWebhook"}'
+   ```
+
+6. **Teste com R$ 1,00 de verdade.** Faça um pedido, pague o QR Code e confirme
+   que o status vira `pago` sozinho. Se não virar, o log da função diz onde parou
+   — token, certificado ou webhook.
+
+Para desenvolver contra o sandbox, defina `INTER_USE_SANDBOX=true` no ambiente
+das funções; o host vira `cdpj-sandbox.partners.uatinter.co`. Nunca por acidente:
+a variável é explícita justamente para o sandbox não vazar para produção.
+
+Sem as cinco credenciais, `placeOrder` **recusa criar o pedido** em produção, em
+vez de gerar um QR Code que ninguém consegue honrar. No emulador, o BR Code de
+teste usa uma chave deliberadamente não pagável.
 
 ### Emuladores
 
@@ -207,18 +283,22 @@ regras de Storage. Usa o SDK
 4. **Configure App Check** com reCAPTCHA Enterprise, preencha
    `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` e habilite a fiscalização no console.
    `placeOrder` e `lookupOrders` exigem App Check por padrão fora do emulador.
-5. **Cadastre os segredos do pagamento** sem colocá-los em `.env` ou no Firestore:
+5. **Cadastre os segredos do pagamento** sem colocá-los em `.env` ou no
+   Firestore — veja [Configurando o Inter](#configurando-o-inter) para o passo a
+   passo completo:
 
    ```bash
-   firebase functions:secrets:set MERCADO_PAGO_ACCESS_TOKEN
-   firebase functions:secrets:set MERCADO_PAGO_WEBHOOK_SECRET
+   firebase functions:secrets:set INTER_CLIENT_ID
+   firebase functions:secrets:set INTER_CLIENT_SECRET
+   firebase functions:secrets:set INTER_PIX_KEY
+   firebase functions:secrets:set INTER_CERTIFICATE < certificado.crt
+   firebase functions:secrets:set INTER_PRIVATE_KEY < chave.key
    # Somente se a conciliação legada Nubank for publicada:
    firebase functions:secrets:set NUBANK_ACCESS_TOKEN
    ```
 
-6. Cadastre no Mercado Pago o endpoint
-   `https://southamerica-east1-SEU-PROJETO.cloudfunctions.net/paymentWebhook`
-   e use no Secret Manager a assinatura secreta fornecida pelo próprio provedor.
+6. Registre o webhook no Inter apontando para
+   `https://southamerica-east1-SEU-PROJETO.cloudfunctions.net/paymentWebhook`.
 7. Publique:
 
    ```bash
