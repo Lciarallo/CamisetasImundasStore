@@ -315,9 +315,10 @@ export const placeOrder = onCall(
       }
 
       const afterDiscount = round2(subtotal - discount);
-      const shipping = afterDiscount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
+      const isOnlyTestItem = lines.length === 1 && subtotal <= 1.0;
+      const shipping = isOnlyTestItem || afterDiscount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
       const beforePayment = round2(afterDiscount + shipping);
-      const pixDiscount = round2(beforePayment * PIX_DISCOUNT);
+      const pixDiscount = isOnlyTestItem ? 0 : round2(beforePayment * PIX_DISCOUNT);
       const total = round2(beforePayment - pixDiscount);
 
       const next = ((counterSnap.data()?.value as number | undefined) ?? 20_000) + 1;
