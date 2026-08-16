@@ -4,6 +4,8 @@ import { defineSecret } from 'firebase-functions/params';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { requirePermission } from './auth.js';
+import { interTxId } from './interGateway.js';
+import { recordUnreconciled } from './payments.js';
 
 const REGION = 'southamerica-east1';
 const NUBANK_ACCESS_TOKEN = defineSecret('NUBANK_ACCESS_TOKEN');
@@ -264,16 +266,38 @@ function containsExactOrderId(reference: string | undefined, orderId: string): b
   return new RegExp(`(^|[^A-Z0-9])${escaped}($|[^A-Z0-9])`, 'i').test(reference);
 }
 
-function hasReconcilableProviderRef(payment: PendingOrder['payment']): boolean {
-  if (payment?.providerRef === null || payment?.providerRef === undefined) {
-    const gateway = payment?.gateway;
-    return gateway === null || gateway === undefined || gateway === 'pix-direto';
-  }
-  return (
-    payment.gateway === 'pix-direto' &&
-    typeof payment.providerRef === 'string' &&
-    /^PIX-DIRECT-CI[A-F0-9]{23}$/.test(payment.providerRef)
-  );
+/** Números de pedido citados no texto da transação (`INS-20001`). */
+function referencedOrderIds(transaction: NubankTransaction): string[] {
+  const text = [transaction.reference, transaction.detail, transaction.title]
+    .filter((value): value is string => Boolean(value))
+    .join('\n')
+    .toUpperCase();
+  return [...new Set(text.match(/INS-\d+/g) ?? [])];
+}
+
+/**
+ * Só pedidos de cobrança direta entram na conciliação por extrato — quem tem
+ * cobrança no PSP se confirma pelo webhook, com leitura na fonte.
+ *
+ * A referência é conferida por derivação, não por formato: tem de ser
+ * `PIX-DIRECT-` mais o txid que `interTxId` produz para *este* pedido. Como o
+ * txid termina em hash do número do pedido, uma referência não pode ser
+ * apontada para outro pedido — mesmo raciocínio de `orderIdFromTxId`.
+ *
+ * O teste anterior era um regex do formato antigo (`PIX-DIRECT-CI` + 23 hex),
+ * abandonado quando o txid passou a seguir o padrão do BACEN. Nenhum pedido
+ * emitido depois disso casava, e a sincronização respondia "0 aprovados" sem
+ * erro — falha silenciosa, a pior espécie.
+ */
+function hasReconcilableProviderRef(payment: PendingOrder['payment'], orderId: string): boolean {
+  const gateway = payment?.gateway;
+  if (gateway !== null && gateway !== undefined && gateway !== 'pix-direto') return false;
+
+  const providerRef = payment?.providerRef;
+  // Pedido já criado, cobrança ainda não emitida.
+  if (providerRef === null || providerRef === undefined) return true;
+
+  return typeof providerRef === 'string' && providerRef === `PIX-DIRECT-${interTxId(orderId)}`;
 }
 
 function matchesOrder(
@@ -284,7 +308,7 @@ function matchesOrder(
   if (
     order.status !== 'aguardando-pagamento' ||
     order.payment?.method !== 'pix' ||
-    !hasReconcilableProviderRef(order.payment)
+    !hasReconcilableProviderRef(order.payment, order.id)
   ) {
     return false;
   }
@@ -595,24 +619,77 @@ export const syncNubankPayments = onCall(
       if (approved) approvedOrders.push(candidate.order.id);
     }
 
+    // Pix que cita um pedido mas não conciliou é dinheiro que entrou sem destino:
+    // pedido vencido, cancelado ou pago com valor diferente. Antes isso sumia da
+    // vista — a transação simplesmente não casava e ninguém ficava sabendo.
+    // Agora vai para a mesma lista que o webhook do Inter alimenta.
+    const reconciledIds = new Set(
+      candidates
+        .filter(({ order }) => approvedOrders.includes(order.id))
+        .map(({ transaction }) => transaction.id),
+    );
+    let unreconciledCount = 0;
+
+    for (const transaction of transactions) {
+      if (reconciledIds.has(transaction.id)) continue;
+
+      // Pix sem número de pedido é movimentação alheia à loja. Registrar tudo
+      // encheria a lista de ruído e guardaria o nome de quem pagou sem motivo.
+      const referenced = referencedOrderIds(transaction);
+      if (referenced.length === 0) continue;
+
+      // Conciliado numa rodada anterior: o pedido já saiu de
+      // 'aguardando-pagamento', então não casaria de novo nem deveria alarmar.
+      const processedSnap = await integrationRef
+        .collection('processedTransactions')
+        .doc(processedTransactionDocumentId(transaction.id))
+        .get();
+      if (processedSnap.exists) continue;
+
+      const alreadyLinked = await db
+        .collection('orders')
+        .where('payment.providerRef', '==', transaction.id)
+        .limit(1)
+        .get();
+      if (!alreadyLinked.empty) continue;
+
+      await recordUnreconciled('nubank', transaction.id, {
+        amount: transaction.amount,
+        transactionDate: transaction.postDate,
+        referencedOrderIds: referenced,
+        reason: 'Pix cita pedido, mas nenhuma correspondência inequívoca foi aceita.',
+      });
+      unreconciledCount++;
+    }
+
     await integrationRef.set(
       {
         lastSyncAt: nowIso,
         lastSyncStatus: 'ok',
-        lastSyncMessage: `${approvedOrders.length} pedido(s) aprovado(s) automaticamente.`,
+        lastSyncMessage:
+          `${approvedOrders.length} pedido(s) aprovado(s) automaticamente.` +
+          (unreconciledCount > 0
+            ? ` ${unreconciledCount} pagamento(s) sem pedido apto aguardando revisão.`
+            : ''),
         lastTransactionsCount: transactions.length,
       },
       { merge: true },
     );
 
+    const pending =
+      unreconciledCount > 0
+        ? ` ${unreconciledCount} pagamento(s) chegaram sem pedido apto — revise em Pagamentos não conciliados.`
+        : '';
+
     return {
       approvedCount: approvedOrders.length,
       approvedOrders,
       transactionsCount: transactions.length,
+      unreconciledCount,
       message:
-        approvedOrders.length > 0
+        (approvedOrders.length > 0
           ? `${approvedOrders.length} pedido(s) aprovado(s): ${approvedOrders.join(', ')}`
-          : 'Sincronização concluída sem correspondência inequívoca.',
+          : 'Sincronização concluída sem correspondência inequívoca.') + pending,
     };
   },
 );

@@ -51,6 +51,59 @@ function isFirebaseEmulator(): boolean {
   return process.env.FUNCTIONS_EMULATOR === 'true' || Boolean(process.env.FIREBASE_EMULATOR_HUB);
 }
 
+/**
+ * Recebimento direto na chave da loja, sem PSP no meio.
+ *
+ * Existe porque MEI não tem acesso à API de cobrança de banco nenhum — o Inter
+ * recusa por tipo de conta — e todo gateway que aceita cobra percentual sobre
+ * cada venda. Receber na própria chave é gratuito.
+ *
+ * O preço disso é que o BR Code é estático: o banco não impõe a expiração, então
+ * ele segue pagável depois que `expirePendingOrders` devolve o estoque. Quem
+ * liga estas variáveis aceita esse risco, e a contrapartida é que **nenhuma
+ * cobrança direta se confirma sozinha**: quem promove o pedido a pago é o robô
+ * de conciliação ou o Mestre. Dinheiro que chegar para um pedido já vencido cai
+ * em `unreconciledPayments`, para estorno ou reativação.
+ *
+ * As três variáveis são exigidas juntas de propósito: sem todas, falhamos
+ * fechado, e ninguém liga cobrança direta por acidente de ambiente.
+ */
+function directPixMerchant(): { key: string; merchantName: string; merchantCity: string } | null {
+  const key = process.env.PIX_DIRECT_KEY?.trim();
+  const merchantName = process.env.PIX_DIRECT_MERCHANT_NAME?.trim();
+  const merchantCity = process.env.PIX_DIRECT_MERCHANT_CITY?.trim();
+  if (!key || !merchantName || !merchantCity) return null;
+  return { key, merchantName, merchantCity };
+}
+
+/** BR Code montado aqui mesmo: sem chamada externa, sem tarifa, sem credencial. */
+function directPixCharge(
+  input: ChargeRequest,
+  merchant: { key: string; merchantName: string; merchantCity: string },
+): ChargeResult {
+  const txId = interTxId(input.orderId);
+  const payload = buildPixPayload({
+    key: merchant.key,
+    merchantName: merchant.merchantName,
+    merchantCity: merchant.merchantCity,
+    amount: input.amount,
+    txId,
+    // O número do pedido viaja no BR Code porque é ele que a conciliação procura
+    // na referência do extrato. Sem essa âncora sobraria casar por valor, e dois
+    // pedidos do mesmo preço ficariam indistinguíveis.
+    description: `Pedido ${input.orderId}`,
+  });
+
+  return {
+    gateway: 'pix-direto',
+    providerRef: `PIX-DIRECT-${txId}`,
+    // Nunca 'aprovado': cobrança direta não prova pagamento nenhum.
+    status: 'pendente',
+    payload,
+    expiresAt: new Date(Date.now() + CHARGE_TTL_SECONDS * 1000).toISOString(),
+  };
+}
+
 function cents(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
   const rounded = Math.round(value * 100);
@@ -80,31 +133,35 @@ export async function createPaymentCharge(input: ChargeRequest): Promise<ChargeR
   validateChargeRequest(input);
 
   if (!isInterConfigured()) {
-    // Um BR Code estático não pode ser invalidado quando a reserva vence: ele
-    // segue cobrando depois de o estoque voltar para a prateleira. Em produção,
-    // portanto, falhamos fechado. O caminho abaixo serve só à suíte local e usa
-    // uma chave deliberadamente não pagável.
+    // Ordem deliberada: PSP primeiro, cobrança direta só se alguém a configurou
+    // por inteiro, emulador por último. Produção sem nenhum dos dois falha
+    // fechado — melhor recusar a venda do que emitir um QR Code que ninguém
+    // consegue honrar.
+    const merchant = directPixMerchant();
+    if (merchant) {
+      const charge = directPixCharge(input, merchant);
+      logger.info('Cobrança PIX direta criada', {
+        orderId: input.orderId,
+        providerRef: charge.providerRef,
+      });
+      return charge;
+    }
+
     if (!isFirebaseEmulator()) {
       throw new Error('O provedor de cobrança PIX não está configurado.');
     }
-    const txId = interTxId(input.orderId);
-    const payload = buildPixPayload({
+    // A suíte local não pode depender de chave real: esta é deliberadamente
+    // não pagável.
+    const charge = directPixCharge(input, {
       key: 'pix-emulador@example.invalid',
       merchantName: 'CAMISETAS TESTE',
       merchantCity: 'BRASILIA',
-      amount: input.amount,
-      txId,
-      description: `Pedido ${input.orderId}`,
     });
-
-    logger.info('Cobrança PIX simulada criada (emulador)', { orderId: input.orderId, txId });
-    return {
-      gateway: 'pix-direto',
-      providerRef: `PIX-DIRECT-${txId}`,
-      status: 'pendente',
-      payload,
-      expiresAt: new Date(Date.now() + CHARGE_TTL_SECONDS * 1000).toISOString(),
-    };
+    logger.info('Cobrança PIX simulada criada (emulador)', {
+      orderId: input.orderId,
+      providerRef: charge.providerRef,
+    });
+    return charge;
   }
 
   const charge = await createInterCharge({
@@ -150,19 +207,22 @@ interface VerifiedPixPayment {
  * depois das retentativas, e ninguém saberia que entrou dinheiro sem pedido. A
  * lista aparece no painel para alguém resolver — estornar ou reativar.
  */
-async function recordUnreconciled(
+export async function recordUnreconciled(
+  provider: 'inter' | 'nubank',
   providerRef: string,
   detail: Record<string, unknown>,
 ): Promise<void> {
   const db = getFirestore();
   await db
     .collection('unreconciledPayments')
-    .doc(createHash('sha256').update(`inter:${providerRef}`).digest('hex'))
+    // O provedor entra no hash porque referências de origens diferentes podem
+    // colidir; e para o Inter o id continua o mesmo de antes.
+    .doc(createHash('sha256').update(`${provider}:${providerRef}`).digest('hex'))
     .set(
-      { providerRef, provider: 'inter', detectedAt: new Date().toISOString(), ...detail },
+      { providerRef, provider, detectedAt: new Date().toISOString(), ...detail },
       { merge: true },
     );
-  logger.warn('Pagamento PIX recebido sem pedido apto', { providerRef, ...detail });
+  logger.warn('Pagamento PIX recebido sem pedido apto', { provider, providerRef, ...detail });
 }
 
 /** Valida pedido e pagamento na mesma transação que promove o status. */
@@ -266,7 +326,7 @@ async function confirmChargeByTxId(txid: string, orderId: string): Promise<void>
     // 409 aqui significa dinheiro recebido para um pedido que não pode aceitá-lo
     // — vencido, cancelado ou com outro valor. Não pode virar só um log.
     if (cause instanceof WebhookError && cause.httpStatus === 409) {
-      await recordUnreconciled(providerRef, {
+      await recordUnreconciled('inter', providerRef, {
         txid,
         orderId,
         amount: proof.amount,
@@ -316,7 +376,10 @@ export const paymentWebhook = onRequest(
         const orderId = orderIdFromTxId(txid);
         if (!orderId) {
           // txid legítimo do Inter que não nasceu aqui: registra e segue.
-          await recordUnreconciled(txid, { txid, reason: 'txid não corresponde a nenhum pedido.' });
+          await recordUnreconciled('inter', txid, {
+            txid,
+            reason: 'txid não corresponde a nenhum pedido.',
+          });
           continue;
         }
         await confirmChargeByTxId(txid, orderId);

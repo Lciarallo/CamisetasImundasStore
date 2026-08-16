@@ -192,12 +192,61 @@ Só o Mestre lê a lista, e a escrita é exclusiva das funções.
 Como a API Pix é padronizada pelo BACEN, o mesmo código atende Efí, Sicoob ou BB:
 muda URL, credencial e escopo, não a lógica.
 
-Por que **não** um robô que lê o extrato do banco: a conciliação por raspagem de
-sessão depende de um token pessoal que expira em silêncio, forja `User-Agent` e
-`Origin` contra endpoints internos, e não emite cobrança com vencimento real —
-ou seja, não resolve o problema do QR Code que sobrevive à reserva. O
-`nubankGateway` segue no código apenas para pedidos PIX direto legados: é manual,
-exclusivo do Mestre e recusa correspondências ambíguas.
+#### Recebimento direto, para quem não tem API
+
+O Inter só libera API para PJ — **MEI não tem acesso**, e não é menu escondido:
+está na ajuda oficial deles. Todo gateway que aceita MEI cobra percentual sobre a
+venda (Efí 1,19%, Woovi 0,8%, Mercado Pago 0,99%). Receber na própria chave é
+gratuito, e por isso existe o modo direto.
+
+Ligue as três variáveis no ambiente das funções — juntas, ou nada acontece:
+
+```bash
+PIX_DIRECT_KEY=sua-chave-pix
+PIX_DIRECT_MERCHANT_NAME=CAMISETAS INSANAS
+PIX_DIRECT_MERCHANT_CITY=BIGUACU
+```
+
+O BR Code é montado no servidor pelo `pixPayload.ts`, com o valor recalculado e o
+número do pedido na descrição. Sem as três, produção falha fechado: melhor recusar
+a venda do que emitir um QR Code que ninguém consegue honrar.
+
+**O que se perde.** O BR Code é estático, então o banco não impõe a expiração: ele
+segue pagável depois que `expirePendingOrders` devolve o estoque. É exatamente o
+problema que a cobrança `cob` resolve, e quem liga o modo direto aceita conviver
+com ele. A contrapartida é que **nenhuma cobrança direta se confirma sozinha** —
+quem promove o pedido a pago é a conciliação ou o Mestre, na mão.
+
+Pelas regras do BACEN, MEI segue as regras de pessoa física: receber é gratuito
+até ~30 recebimentos/mês, e QR Code **dinâmico** sai da gratuidade. Passado esse
+volume, um PSP passa a valer a pena — e a troca é barata, porque o gateway está
+isolado atrás de cinco funções.
+
+#### Conciliação por extrato
+
+O `nubankGateway` casa pagamentos com pedidos pendentes exigindo **quatro**
+condições ao mesmo tempo: valor exato em centavos, janela de tempo (15 min de
+antecipação, 24h de atraso), transação não vinda do futuro, e o número do pedido
+presente na referência do extrato. Depois descarta tudo que for ambíguo — ID
+repetido no feed, pedido que casa com duas transações, transação que casa com dois
+pedidos. É manual, exclusivo do Mestre, e idempotente por marcador em
+`processedTransactions`.
+
+A referência do pedido é conferida por derivação, não por formato: precisa ser
+`PIX-DIRECT-` mais o `txid` que `interTxId` produz para *aquele* pedido. Como o
+`txid` termina em hash do número do pedido, uma referência não pode ser apontada
+para outro pedido.
+
+Pix que cita um pedido mas não concilia — vencido, cancelado, valor diferente —
+vai para `unreconciledPayments`, a mesma lista do webhook. Pix sem número de
+pedido é movimentação alheia à loja e não é registrado, para não encher a lista de
+ruído nem guardar o nome de quem pagou sem motivo.
+
+A parte frágil continua sendo a **fonte** das transações: ler o extrato por
+raspagem de sessão depende de um token pessoal que expira em silêncio e de
+`User-Agent`/`Origin` forjados contra endpoints internos. O algoritmo de
+conciliação não depende disso — trocar a fonte por um extrato CSV/OFX importado
+não muda uma linha do casamento.
 
 #### Configurando o Inter
 
