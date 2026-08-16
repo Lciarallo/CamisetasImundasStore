@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Hammer, Search, Truck, X } from 'lucide-react';
+import { Hammer, Mail, Search, Truck, X } from 'lucide-react';
 import {
   ORDER_STATUS_FLOW,
   ORDER_STATUS_LABEL,
@@ -199,6 +199,28 @@ function OrderDetail({
   onTracking: (code: string) => void;
 }) {
   const [tracking, setTracking] = useState(order.trackingCode ?? '');
+  const [emailSending, setEmailSending] = useState<string | null>(null);
+  const [emailMessage, setEmailMessage] = useState<string | null>(null);
+
+  const triggerEmail = async (event: string) => {
+    setEmailSending(event);
+    setEmailMessage(null);
+    try {
+      const { loadFunctions } = await import('../../lib/firebase');
+      const { httpsCallable, fns } = await loadFunctions();
+      const res = (await httpsCallable(fns, 'resendOrderEmail')({ orderId: order.id, event })) as any;
+      if (res.data?.ok) {
+        setEmailMessage(`E-mail (${event}) disparado com sucesso!`);
+      } else {
+        setEmailMessage(`Aviso: ${res.data?.reason || 'não enviado'}`);
+      }
+    } catch (err) {
+      setEmailMessage(`Erro ao disparar: ${(err as Error).message}`);
+    } finally {
+      setEmailSending(null);
+      window.setTimeout(() => setEmailMessage(null), 4000);
+    }
+  };
 
   const currentIndex = ORDER_STATUS_FLOW.indexOf(order.status);
   const madeToOrder = order.lines.filter((line) => line.fulfillment === 'sob-encomenda');
@@ -377,6 +399,61 @@ function OrderDetail({
                 <br />
                 CEP {order.address.cep}
               </p>
+            </div>
+          </section>
+
+          {/* Notificações por E-mail */}
+          <section>
+            <p className="label">Notificações por E-mail</p>
+            <div className="space-y-2 border border-smoke p-3">
+              <p className="text-[0.65rem] text-grave">
+                Disparar cópia de e-mail transacional para <strong className="text-bone">{order.customer.email}</strong>:
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <button
+                  type="button"
+                  disabled={Boolean(emailSending)}
+                  onClick={() => void triggerEmail('pedido-criado')}
+                  className="btn btn-ghost px-2 py-1 text-[0.62rem]"
+                >
+                  <Mail className="h-3 w-3" /> Pedido Criado
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(emailSending)}
+                  onClick={() => void triggerEmail('pagamento-confirmado')}
+                  className="btn btn-ghost px-2 py-1 text-[0.62rem]"
+                >
+                  <Mail className="h-3 w-3" /> Pagamento Confirmado
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(emailSending)}
+                  onClick={() => void triggerEmail('em-producao')}
+                  className="btn btn-ghost px-2 py-1 text-[0.62rem]"
+                >
+                  <Mail className="h-3 w-3" /> Em Produção
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(emailSending)}
+                  onClick={() => void triggerEmail('pedido-enviado')}
+                  className="btn btn-ghost px-2 py-1 text-[0.62rem]"
+                >
+                  <Mail className="h-3 w-3" /> Pedido Enviado
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(emailSending)}
+                  onClick={() => void triggerEmail('pedido-entregue')}
+                  className="btn btn-ghost px-2 py-1 text-[0.62rem]"
+                >
+                  <Mail className="h-3 w-3" /> Pedido Entregue
+                </button>
+              </div>
+              {emailMessage && (
+                <p className="mt-2 text-[0.65rem] font-semibold text-blood-bright">{emailMessage}</p>
+              )}
             </div>
           </section>
 

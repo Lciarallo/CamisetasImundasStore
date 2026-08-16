@@ -27,6 +27,7 @@ import {
 import { actorName, requirePermission } from './auth.js';
 import { createPaymentCharge, PAYMENT_RUNTIME_SECRETS } from './payments.js';
 import { enforceRateLimit } from './security.js';
+import { sendOrderStatusEmail, RESEND_SECRETS, type EmailEventType } from './emailService.js';
 
 const REGION = 'southamerica-east1';
 const PAYMENT_RESERVATION_MINUTES = 30;
@@ -186,7 +187,7 @@ export const placeOrder = onCall(
   {
     region: REGION,
     enforceAppCheck: APP_CHECK_ENABLED,
-    secrets: [...PAYMENT_RUNTIME_SECRETS],
+    secrets: [...PAYMENT_RUNTIME_SECRETS, ...RESEND_SECRETS],
   },
   async (request) => {
     const input = parseInput(request.data);
@@ -444,6 +445,12 @@ export const placeOrder = onCall(
       }
     }
 
+    // Dispara notificação por e-mail para o comprador
+    void sendOrderStatusEmail(
+      { ...order, customerAccessToken: input.idempotencyKey },
+      order.status === 'pago' ? 'pagamento-confirmado' : 'pedido-criado',
+    );
+
     return {
       ...orderForClient(order),
       customerAccessToken: input.idempotencyKey,
@@ -574,7 +581,7 @@ async function cancelPendingOrder(orderId: string, by: string): Promise<boolean>
 }
 
 export const updateOrderStatus = onCall(
-  { region: REGION },
+  { region: REGION, secrets: [...RESEND_SECRETS] },
   async (request) => {
     const { uid, claims } = await requirePermission(request, 'orders.edit');
     const { orderId, status } = (request.data ?? {}) as {
@@ -650,13 +657,35 @@ export const updateOrderStatus = onCall(
       });
     });
 
+    // Dispara e-mail correspondente ao novo status
+    const updatedSnap = await db.collection('orders').doc(orderId).get();
+    if (updatedSnap.exists) {
+      const order = { id: updatedSnap.id, ...updatedSnap.data() };
+      const eventMap: Partial<Record<OrderStatus, EmailEventType>> = {
+        'pago': 'pagamento-confirmado',
+        'em-producao': 'em-producao',
+        'enviado': 'pedido-enviado',
+        'entregue': 'pedido-entregue',
+        'cancelado': 'pedido-cancelado',
+      };
+      const ev = eventMap[status];
+      if (ev) {
+        void sendOrderStatusEmail(order, ev);
+      }
+    }
+
     return { ok: true };
   },
 );
 
 /** Libera reservas PIX vencidas e devolve o estoque exatamente uma vez. */
 export const expirePendingOrders = onSchedule(
-  { region: REGION, schedule: 'every 5 minutes', timeZone: 'America/Sao_Paulo' },
+  {
+    region: REGION,
+    schedule: 'every 5 minutes',
+    timeZone: 'America/Sao_Paulo',
+    secrets: [...RESEND_SECRETS],
+  },
   async () => {
     const db = getFirestore();
     const now = new Date().toISOString();
@@ -669,7 +698,10 @@ export const expirePendingOrders = onSchedule(
 
     let expired = 0;
     for (const doc of snap.docs) {
-      if (await cancelPendingOrder(doc.id, 'Sistema (reserva PIX expirada)')) expired++;
+      if (await cancelPendingOrder(doc.id, 'Sistema (reserva PIX expirada)')) {
+        expired++;
+        void sendOrderStatusEmail({ id: doc.id, ...doc.data() }, 'pedido-cancelado');
+      }
     }
 
     const staleLimits = await db
@@ -689,24 +721,36 @@ export const expirePendingOrders = onSchedule(
   },
 );
 
-export const setTrackingCode = onCall({ region: REGION }, async (request) => {
-  await requirePermission(request, 'orders.edit');
-  const { orderId, code } = (request.data ?? {}) as { orderId?: string; code?: string };
+export const setTrackingCode = onCall(
+  { region: REGION, secrets: [...RESEND_SECRETS] },
+  async (request) => {
+    await requirePermission(request, 'orders.edit');
+    const { orderId, code } = (request.data ?? {}) as { orderId?: string; code?: string };
 
-  if (!orderId || typeof orderId !== 'string') {
-    throw new HttpsError('invalid-argument', 'Pedido não informado.');
-  }
-  if (typeof code !== 'string' || code.trim().length > 40) {
-    throw new HttpsError('invalid-argument', 'Código de rastreio inválido.');
-  }
+    if (!orderId || typeof orderId !== 'string') {
+      throw new HttpsError('invalid-argument', 'Pedido não informado.');
+    }
+    if (typeof code !== 'string' || code.trim().length > 40) {
+      throw new HttpsError('invalid-argument', 'Código de rastreio inválido.');
+    }
 
-  await getFirestore()
-    .collection('orders')
-    .doc(orderId)
-    .update({ trackingCode: code.trim() || null });
+    const cleanCode = code.trim() || null;
+    const db = getFirestore();
+    await db
+      .collection('orders')
+      .doc(orderId)
+      .update({ trackingCode: cleanCode });
 
-  return { ok: true };
-});
+    if (cleanCode) {
+      const snap = await db.collection('orders').doc(orderId).get();
+      if (snap.exists) {
+        void sendOrderStatusEmail({ id: snap.id, ...snap.data(), trackingCode: cleanCode }, 'pedido-enviado');
+      }
+    }
+
+    return { ok: true };
+  },
+);
 
 /**
  * Consulta um único pedido. Para o cliente, o número público não basta: também

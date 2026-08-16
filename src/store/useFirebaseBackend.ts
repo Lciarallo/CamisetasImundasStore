@@ -520,6 +520,11 @@ export function useFirebaseBackend(): StoreValue {
       coupons: SEED_COUPONS.map(({ code, ...rest }) => ({ code, coupon: rest })),
       replace: true,
     });
+    try {
+      await call('clearTestHistory', {});
+    } catch {
+      // Falha não crítica se usuário não tiver permissão
+    }
     clearCart();
   }, [clearCart]);
 

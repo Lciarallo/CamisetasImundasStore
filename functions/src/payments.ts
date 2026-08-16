@@ -22,12 +22,13 @@ import {
   INFINITEPAY_SECRETS,
   type PaymentCoordinates,
 } from './infinitePayGateway.js';
+import { sendOrderStatusEmail, RESEND_SECRETS } from './emailService.js';
 
 const REGION = 'southamerica-east1';
 const CHARGE_TTL_SECONDS = 30 * 60;
 
 /** Secrets que as funções de cobrança e de webhook precisam ter ligados. */
-export const PAYMENT_RUNTIME_SECRETS = INFINITEPAY_SECRETS;
+export const PAYMENT_RUNTIME_SECRETS = [...INFINITEPAY_SECRETS, ...RESEND_SECRETS];
 
 export interface ChargeRequest {
   /** Identificador criado pelo backend, depois de o total ser calculado. */
@@ -172,7 +173,7 @@ export async function markVerifiedPaymentPaid(
     .collection('paymentEvents')
     .doc(createHash('sha256').update(`infinitepay:${payment.providerRef}`).digest('hex'));
 
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const [snap, eventSnap] = await tx.getAll(ref, eventRef);
     if (!snap.exists) throw new WebhookError(404, 'Pedido não encontrado.');
 
@@ -221,6 +222,15 @@ export async function markVerifiedPaymentPaid(
     });
     return 'paid';
   });
+
+  if (result === 'paid') {
+    const snap = await ref.get();
+    if (snap.exists) {
+      void sendOrderStatusEmail({ id: snap.id, ...snap.data() }, 'pagamento-confirmado');
+    }
+  }
+
+  return result;
 }
 
 function parseCoordinates(raw: Record<string, unknown>): PaymentCoordinates | null {
@@ -288,7 +298,7 @@ function collectCoordinates(body: unknown, query: unknown): PaymentCoordinates[]
 }
 
 export const paymentWebhook = onRequest(
-  { region: REGION, cors: true, secrets: [...INFINITEPAY_SECRETS] },
+  { region: REGION, cors: true, secrets: [...PAYMENT_RUNTIME_SECRETS] },
   async (request, response) => {
     if (request.method !== 'POST' && request.method !== 'GET') {
       response.set('Allow', 'POST, GET').status(405).send('Method Not Allowed');
@@ -393,7 +403,7 @@ export const paymentWebhook = onRequest(
 );
 
 export const syncPayment = onCall(
-  { region: REGION, secrets: [...INFINITEPAY_SECRETS] },
+  { region: REGION, secrets: [...PAYMENT_RUNTIME_SECRETS] },
   async (request) => {
     const { orderId, transactionNsu, slug } = (request.data ?? {}) as {
       orderId?: string;
