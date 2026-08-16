@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
-import { onRequest } from 'firebase-functions/v2/https';
+import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https';
 import type { OrderStatus } from './domain.js';
 import {
   checkInfinitePayPayment,
@@ -332,3 +332,52 @@ export const paymentWebhook = onRequest(
     }
   },
 );
+
+export const syncPayment = onCall(
+  { region: REGION, secrets: [...INFINITEPAY_SECRETS] },
+  async (request) => {
+    const { orderId, transactionNsu, slug } = (request.data ?? {}) as {
+      orderId?: string;
+      transactionNsu?: string;
+      slug?: string;
+    };
+
+    if (!orderId || typeof orderId !== 'string') {
+      throw new HttpsError('invalid-argument', 'Identificador do pedido não informado.');
+    }
+
+    const cleanId = orderId.trim().toUpperCase();
+    const db = getFirestore();
+    const snap = await db.collection('orders').doc(cleanId).get();
+    if (!snap.exists) {
+      throw new HttpsError('not-found', 'Pedido não encontrado.');
+    }
+
+    const order = snap.data() as Record<string, any>;
+    if (order.status === 'pago') {
+      return { ok: true, status: 'pago', paid: true };
+    }
+
+    if (transactionNsu && slug) {
+      const proof = await checkInfinitePayPayment({
+        orderId: cleanId,
+        transactionNsu: transactionNsu.trim(),
+        slug: slug.trim(),
+      });
+
+      if (proof.paid && proof.amountCents !== null) {
+        await markVerifiedPaymentPaid({
+          orderId: cleanId,
+          providerRef: transactionNsu.trim(),
+          transactionAmountCents: proof.amountCents,
+          captureMethod: proof.captureMethod,
+          by: 'InfinitePay (sync/retorno)',
+        });
+        return { ok: true, status: 'pago', paid: true };
+      }
+    }
+
+    return { ok: true, status: order.status, paid: false };
+  },
+);
+

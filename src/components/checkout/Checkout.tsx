@@ -280,6 +280,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
     setStep('confirmado');
     clearCart();
 
+    if (order.payment?.checkoutUrl) {
+      window.location.assign(order.payment.checkoutUrl);
+      return;
+    }
+
     // Cinzas caindo, não confete colorido — o tom da loja não comporta festa.
     confetti({
       particleCount: 90,

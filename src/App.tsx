@@ -38,6 +38,25 @@ export function App() {
     clearLegacyCustomerData();
   }, []);
 
+  // Trata retorno da InfinitePay com coordenadas de pagamento
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('order_nsu') || params.get('orderId');
+    const transactionNsu = params.get('transaction_nsu') || params.get('transactionNsu');
+    const slug = params.get('slug');
+
+    if (orderId && transactionNsu && slug) {
+      import('./lib/firebase').then(async ({ loadFunctions }) => {
+        try {
+          const { httpsCallable, fns } = await loadFunctions();
+          await httpsCallable(fns, 'syncPayment')({ orderId, transactionNsu, slug });
+        } catch {
+          // Webhook processa em paralelo
+        }
+      });
+    }
+  }, []);
+
   // Sincroniza com voltar/avançar do navegador.
   useEffect(() => {
     const onHashChange = () => setRoute(routeFromHash());

@@ -26,4 +26,4 @@ export {
 export { saveProduct, deleteProduct, setStock } from './catalog.js';
 export { saveStaff, deleteStaff, registerLogin } from './staff.js';
 export { bootstrap, seedCatalog } from './bootstrap.js';
-export { paymentWebhook } from './payments.js';
+export { paymentWebhook, syncPayment } from './payments.js';
