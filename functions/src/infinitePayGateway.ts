@@ -63,12 +63,18 @@ function handle(): string {
  * v2 já mudou uma vez (`cloudfunctions.net` ↔ `run.app`), e derivar errado faz o
  * webhook nunca chegar — sintoma silencioso, o pior tipo.
  */
-function publicBaseUrl(): string | undefined {
-  return env('INFINITEPAY_PUBLIC_BASE_URL')?.replace(/\/+$/, '');
+function publicBaseUrl(): string {
+  return (
+    env('INFINITEPAY_PUBLIC_BASE_URL')?.replace(/\/+$/, '') ??
+    'https://camisetas-imundas-store.web.app'
+  );
 }
 
-function webhookUrl(): string | undefined {
-  return env('INFINITEPAY_WEBHOOK_URL');
+function webhookUrl(): string {
+  return (
+    env('INFINITEPAY_WEBHOOK_URL') ??
+    'https://paymentwebhook-jtx43gwm3a-rj.a.run.app'
+  );
 }
 
 async function postJson(path: string, body: unknown): Promise<Record<string, unknown>> {
