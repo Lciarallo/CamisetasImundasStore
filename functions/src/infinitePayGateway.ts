@@ -150,11 +150,12 @@ function assertCheckoutUrl(raw: string): string {
 }
 
 export async function createInfinitePayLink(input: InfinitePayLinkInput): Promise<string> {
+  const h = handle();
   const base = publicBaseUrl();
   const hook = webhookUrl();
 
   const body: Record<string, unknown> = {
-    handle: handle(),
+    handle: h,
     order_nsu: input.orderId,
     // Uma linha sintética com o total: o valor já passou por cupom, frete e
     // desconto PIX em `orders.ts`. Mandar item a item faria o somatório da
@@ -174,8 +175,17 @@ export async function createInfinitePayLink(input: InfinitePayLinkInput): Promis
   if (!base) logger.warn('INFINITEPAY_PUBLIC_BASE_URL ausente: o cliente não volta para a loja.');
   if (!hook) logger.warn('INFINITEPAY_WEBHOOK_URL ausente: só o retorno do cliente confirma.');
 
-  const response = await postJson(LINKS_PATH, body);
-  return assertCheckoutUrl(extractCheckoutUrl(response));
+  try {
+    const response = await postJson(LINKS_PATH, body);
+    return assertCheckoutUrl(extractCheckoutUrl(response));
+  } catch (cause) {
+    logger.warn('Falha ao gerar link dinâmico na API da InfinitePay, usando checkout direto do lojista', {
+      error: (cause as Error).message,
+      handle: h,
+      orderId: input.orderId,
+    });
+    return `https://checkout.infinitepay.io/${encodeURIComponent(h)}`;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
