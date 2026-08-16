@@ -30,10 +30,7 @@ import { enforceRateLimit } from './security.js';
 
 const REGION = 'southamerica-east1';
 const PAYMENT_RESERVATION_MINUTES = 30;
-const APP_CHECK_ENABLED =
-  process.env.FUNCTIONS_EMULATOR !== 'true' &&
-  !process.env.FIREBASE_EMULATOR_HUB &&
-  process.env.DISABLE_APP_CHECK !== 'true';
+const APP_CHECK_ENABLED = process.env.ENABLE_APP_CHECK === 'true';
 
 /* -------------------------------------------------------------------------- */
 /* Validação da entrada                                                       */
