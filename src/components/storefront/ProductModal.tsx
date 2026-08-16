@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Hammer, Minus, Plus, Star, Truck, X } from 'lucide-react';
+import { Check, Hammer, Minus, Plus, Truck, X } from 'lucide-react';
 import type { Product, Size } from '../../types';
 import { money } from '../../lib/format';
 import { availableFor, sizesFor } from '../../store/StoreContext';
@@ -125,13 +125,6 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
               >
                 {product.name}
               </h2>
-              <div className="mt-2 flex items-center gap-1.5 text-[0.7rem] text-grave">
-                <Star className="h-3 w-3 fill-blood-bright text-blood-bright" />
-                <span className="font-semibold text-parchment tabular-nums">
-                  {product.rating.toFixed(1).replace('.', ',')}
-                </span>
-                <span>· {product.reviewsCount} avaliações</span>
-              </div>
             </div>
 
             <p className="text-sm leading-relaxed text-parchment">{product.description}</p>

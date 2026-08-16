@@ -52,20 +52,6 @@ export function Hero({ onExplore }: { onExplore: () => void }) {
           </a>
         </div>
 
-        {/* Números da loja */}
-        <dl className="mx-auto mt-16 grid max-w-lg grid-cols-3 gap-px border border-smoke bg-smoke">
-          {[
-            ['66', 'bandas no acervo'],
-            ['12k', 'peças despachadas'],
-            ['4,8', 'nota dos clientes'],
-          ].map(([value, label]) => (
-            <div key={label} className="bg-crypt px-3 py-5">
-              <dd className="font-display text-2xl font-bold text-bone tabular-nums">{value}</dd>
-              <dt className="heading-carved mt-1 text-[0.55rem] text-grave">{label}</dt>
-            </div>
-          ))}
-        </dl>
-
         <button
           onClick={onExplore}
           className="mt-14 inline-flex flex-col items-center gap-2 text-grave transition-colors hover:text-blood-bright"

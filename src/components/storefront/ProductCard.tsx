@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Hammer, Star } from 'lucide-react';
+import { Hammer } from 'lucide-react';
 import type { Product, Size } from '../../types';
 import { money } from '../../lib/format';
 import { availableFor, isSoldOut, sizesFor, totalStock } from '../../store/StoreContext';
@@ -79,13 +79,8 @@ export function ProductCard({ product, onOpen, onAddToCart }: ProductCardProps) 
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 text-[0.68rem] text-grave">
-          <Star className="h-3 w-3 fill-blood-bright text-blood-bright" />
-          <span className="font-semibold text-parchment tabular-nums">
-            {product.rating.toFixed(1).replace('.', ',')}
-          </span>
-          <span>({product.reviewsCount})</span>
-          <span className="ml-auto">{product.category}</span>
+        <div className="flex items-center text-[0.68rem] text-grave">
+          <span>{product.category}</span>
         </div>
 
         {/* Seletor rápido de tamanho */}
