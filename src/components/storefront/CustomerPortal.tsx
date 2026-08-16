@@ -3,7 +3,6 @@ import {
   CheckCircle2,
   Clock,
   Copy,
-  ExternalLink,
   Package,
   Search,
   Truck,
@@ -19,7 +18,7 @@ import {
 } from '../../lib/customerOrders';
 import { useStore } from '../../store/StoreContext';
 import { TeeArtwork } from '../art/TeeArtwork';
-import { PixPanel } from '../checkout/PixPanel';
+import { InfinitePayPanel } from '../checkout/InfinitePayPanel';
 
 const STEPS: { status: OrderStatus; label: string }[] = [
   { status: 'aguardando-pagamento', label: 'Pedido Criado' },
@@ -274,7 +273,7 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
                         Total a pagar: <strong className="text-bone">{money(order.total)}</strong>
                       </p>
                     </div>
-                    {order.payment.pixCode ? (
+                    {order.payment.checkoutUrl || order.payment.pixCode ? (
                       <button
                         onClick={() => setSelectedPixOrder(order)}
                         className="btn btn-blood text-xs"
@@ -283,7 +282,7 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
                       </button>
                     ) : (
                       <p className="max-w-xs text-[0.65rem] text-blood-bright">
-                        Código PIX indisponível. Não faça uma transferência avulsa;
+                        Link de pagamento indisponível. Não faça uma transferência avulsa;
                         procure o suporte.
                       </p>
                     )}
@@ -300,33 +299,34 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
                         <p className="font-mono text-xs font-bold text-bone">{order.trackingCode}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => copyTracking(order.trackingCode!)}
-                        className="btn btn-ghost text-xs"
-                        title="Copiar código de rastreamento"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        {copiedTracking === order.trackingCode ? 'Copiado!' : 'Copiar'}
-                      </button>
-                      <a
-                        href={`https://rastreamento.correios.com.br/app/index.php?codigo=${order.trackingCode}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-bone flex items-center gap-1 text-xs"
-                      >
-                        Rastrear nos Correios
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
+                    <button
+                      onClick={() => copyTracking(order.trackingCode!)}
+                      className="btn btn-ghost border-smoke text-xs"
+                    >
+                      {copiedTracking === order.trackingCode ? (
+                        <>
+                          <CheckCircle2 className="h-3.5 w-3.5 text-blood-bright" />
+                          <span className="text-blood-bright">Copiado</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5" />
+                          <span>Copiar</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 )}
 
                 {/* Itens do Pedido */}
-                <div className="mt-4 divide-y divide-smoke/60 border-t border-smoke/70 pt-3">
-                  {order.lines.map((line, lineIndex) => (
-                    <div key={lineIndex} className="flex items-center gap-3 py-2">
-                      <div className="relative h-11 w-11 shrink-0 overflow-hidden border border-smoke bg-pitch">
+                <div className="mt-4 space-y-2">
+                  <p className="heading-carved text-[0.58rem] text-grave">Itens do Pedido</p>
+                  {order.lines.map((line, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-3 border border-smoke/50 bg-pitch/50 p-2"
+                    >
+                      <div className="h-10 w-10 shrink-0 overflow-hidden bg-void">
                         {line.photo ? (
                           <img
                             src={line.photo}
@@ -380,7 +380,7 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Modal Secundário de PIX */}
-        {selectedPixOrder?.payment.pixCode && (
+        {selectedPixOrder && (selectedPixOrder.payment.checkoutUrl || selectedPixOrder.payment.pixCode) && (
           <div
             className="anim-fade fixed inset-0 z-80 flex items-center justify-center bg-void/90 p-4"
             onClick={() => setSelectedPixOrder(null)}
@@ -399,14 +399,14 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
                 <button
                   onClick={() => setSelectedPixOrder(null)}
                   className="text-grave hover:text-bone"
-                  aria-label="Fechar pagamento PIX"
+                  aria-label="Fechar pagamento"
                 >
                   <XCircle className="h-5 w-5" />
                 </button>
               </div>
               <div className="pt-4">
-                <PixPanel
-                  payload={selectedPixOrder.payment.pixCode}
+                <InfinitePayPanel
+                  checkoutUrl={selectedPixOrder.payment.checkoutUrl ?? selectedPixOrder.payment.pixCode}
                   amount={selectedPixOrder.total}
                 />
               </div>

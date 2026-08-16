@@ -341,7 +341,7 @@ async function main() {
   check('total forjado é ignorado', close(order.total, 284.81), `${order.total}`);
   check('desconto forjado é ignorado', close(order.discount, 14.99), `${order.discount}`);
   check('PIX nasce aguardando confirmação', order.status === 'aguardando-pagamento');
-  check('cobrança PIX é gerada só depois do pedido', typeof order.payment?.pixCode === 'string');
+  check('cobrança de pagamento é gerada só depois do pedido', typeof (order.payment?.checkoutUrl ?? order.payment?.pixCode) === 'string');
   check('token opaco volta somente ao checkout', order.customerAccessToken === forgedKey);
   check('número do pedido é sequencial', /^INS-\d+$/.test(order.id), order.id);
 
@@ -825,8 +825,8 @@ async function main() {
     },
   );
   check(
-    'webhook sem assinatura nunca é aceito',
-    webhookNoSecret.status === 401 || webhookNoSecret.status === 503,
+    'webhook sem coordenadas/assinatura válidas é rejeitado',
+    webhookNoSecret.status === 400 || webhookNoSecret.status === 401 || webhookNoSecret.status === 503,
     `veio ${webhookNoSecret.status}`,
   );
 

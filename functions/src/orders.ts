@@ -344,9 +344,10 @@ export const placeOrder = onCall(
         total,
         payment: {
           method: 'pix' as const,
-          gateway: null,
+          gateway: 'infinitepay' as const,
           status: 'pendente',
           providerRef: null,
+          checkoutUrl: null,
           pixCode: null,
           expiresAt: reservationExpiresAt,
         },
@@ -371,7 +372,7 @@ export const placeOrder = onCall(
     let order = created.order as Record<string, any>;
     if (
       order.status === 'aguardando-pagamento' &&
-      (!order.payment?.pixCode || !order.payment?.providerRef)
+      (!order.payment?.checkoutUrl || !order.payment?.providerRef)
     ) {
       try {
         const charge = await createPaymentCharge({
@@ -382,6 +383,7 @@ export const placeOrder = onCall(
             name: order.customer.name,
             email: order.customer.email,
             cpf: order.customer.cpf,
+            phone: order.customer.phone,
           },
         });
 
@@ -390,7 +392,7 @@ export const placeOrder = onCall(
           const snap = await tx.get(ref);
           if (!snap.exists) throw new HttpsError('not-found', 'Pedido não encontrado.');
           const current = snap.data() as Record<string, any>;
-          if (current.payment?.pixCode && current.payment?.providerRef) return current;
+          if (current.payment?.checkoutUrl && current.payment?.providerRef) return current;
           if (current.status !== 'aguardando-pagamento') return current;
 
           const paid = charge.status === 'aprovado';
@@ -405,7 +407,7 @@ export const placeOrder = onCall(
             'payment.gateway': charge.gateway,
             'payment.status': charge.status,
             'payment.providerRef': charge.providerRef,
-            'payment.pixCode': charge.payload ?? null,
+            'payment.checkoutUrl': charge.checkoutUrl,
             'payment.expiresAt': charge.expiresAt ?? current.reservationExpiresAt,
             reservationExpiresAt: charge.expiresAt ?? current.reservationExpiresAt,
           };
@@ -425,7 +427,7 @@ export const placeOrder = onCall(
               gateway: charge.gateway,
               status: charge.status,
               providerRef: charge.providerRef,
-              pixCode: charge.payload ?? null,
+              checkoutUrl: charge.checkoutUrl,
               expiresAt: charge.expiresAt ?? current.reservationExpiresAt,
             },
             reservationExpiresAt: charge.expiresAt ?? current.reservationExpiresAt,
@@ -439,7 +441,7 @@ export const placeOrder = onCall(
         if (cause instanceof HttpsError) throw cause;
         throw new HttpsError(
           'unavailable',
-          'O pedido foi reservado, mas a cobrança PIX não pôde ser gerada. Tente novamente.',
+          'O pedido foi reservado, mas a cobrança de pagamento não pôde ser gerada. Tente novamente.',
         );
       }
     }
@@ -497,6 +499,8 @@ function orderForClient(order: Record<string, any>): Record<string, any> {
     payment: {
       method: payment.method,
       status: payment.status,
+      ...(payment.gateway ? { gateway: payment.gateway } : {}),
+      ...(payment.checkoutUrl ? { checkoutUrl: payment.checkoutUrl } : {}),
       ...(payment.pixCode ? { pixCode: payment.pixCode } : {}),
       ...(payment.expiresAt ? { expiresAt: payment.expiresAt } : {}),
     },

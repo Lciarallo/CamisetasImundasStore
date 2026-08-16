@@ -36,7 +36,7 @@ import { useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
 import { BrandLogo } from '../art/BrandLogo';
 import { TeeImage } from '../art/TeeImage';
-import { PIX_DISCOUNT, PixPanel } from './PixPanel';
+import { PIX_DISCOUNT, InfinitePayPanel } from './InfinitePayPanel';
 
 type Step = 'identificacao' | 'entrega' | 'pagamento' | 'confirmado';
 
@@ -894,8 +894,8 @@ function OrderConfirmation({
 
           <h1 className="mt-5 font-logo text-3xl text-bone">Pedido criado</h1>
           <p className="mt-2 text-sm text-parchment">
-            {order.payment.pixCode
-              ? 'Pague usando o código exclusivo abaixo. Assim que o PIX compensar, sua peça entra em separação.'
+            {order.payment.checkoutUrl || order.payment.pixCode
+              ? 'Finalize o pagamento seguro via InfinitePay. Assim que o PIX compensar, sua peça entra em separação.'
               : 'Seu pedido foi registrado, mas nenhuma cobrança foi gerada.'}
           </p>
 
@@ -904,15 +904,18 @@ function OrderConfirmation({
             <p className="font-display text-2xl font-bold text-bone tabular-nums">{order.id}</p>
           </div>
 
-          {order.payment.pixCode ? (
+          {order.payment.checkoutUrl || order.payment.pixCode ? (
             <div className="mt-6 text-left">
-              <PixPanel payload={order.payment.pixCode} amount={order.total} />
+              <InfinitePayPanel
+                checkoutUrl={order.payment.checkoutUrl ?? order.payment.pixCode}
+                amount={order.total}
+              />
             </div>
           ) : (
             <div className="mt-6 border border-blood bg-blood/10 p-4 text-left text-xs text-blood-bright">
               {mode === 'local'
-                ? 'Este pedido é apenas uma demonstração local e não gera cobrança PIX.'
-                : 'O pedido foi criado, mas o servidor não devolveu um código PIX. Não faça uma transferência avulsa; consulte o pedido novamente ou fale com o suporte.'}
+                ? 'Este pedido é apenas uma demonstração local e não gera cobrança real.'
+                : 'O pedido foi criado, mas o servidor não devolveu o link de pagamento. Não faça uma transferência avulsa; consulte o pedido novamente ou fale com o suporte.'}
             </div>
           )}
 

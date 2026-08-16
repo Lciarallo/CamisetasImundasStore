@@ -11,9 +11,8 @@ import type {
   Size,
 } from '../types';
 import { SEED_PRODUCTS } from '../data/products';
-import { SEED_COUPONS, SEED_USERS, generateSeedOrders } from '../data/seed';
+import { PIX_DISCOUNT, SEED_COUPONS, SEED_USERS, generateSeedOrders } from '../data/seed';
 import { usePersistentState, wipeStorage } from '../lib/storage';
-import { PIX_DISCOUNT } from '../components/checkout/PixPanel';
 import { availableFor, computeTotals } from './cart';
 import type { OrderDraft, Result, StoreValue } from './types';
 
@@ -188,7 +187,12 @@ export function useLocalBackend(): StoreValue {
         discount: cartTotals.discount + pixDiscount,
         shipping: cartTotals.shipping,
         total,
-        payment: { method: 'pix' },
+        payment: {
+          method: 'pix',
+          gateway: 'local',
+          status: 'pendente',
+          checkoutUrl: `https://checkout.infinitepay.io/mock/${orderId}`,
+        },
         coupon: draft.coupon,
         history: [{ status, at: createdAt }],
       };

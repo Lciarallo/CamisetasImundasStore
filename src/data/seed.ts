@@ -140,6 +140,8 @@ function statusForAge(random: () => number, daysAgo: number): OrderStatus {
 
 export const FREE_SHIPPING_THRESHOLD = 299;
 export const SHIPPING_COST = 24.9;
+/** Desconto por pagar à vista no PIX — praxe no varejo brasileiro. */
+export const PIX_DISCOUNT = 0.05;
 
 /**
  * Monta 90 dias de histórico. `now` é injetado para o resultado ser

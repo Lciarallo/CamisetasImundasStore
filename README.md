@@ -59,7 +59,7 @@ dedicado, e oferecer o botão desabilitado só anunciaria uma promessa vazia.
 
 | Recurso | Detalhe |
 |---|---|
-| **PIX** | Cobrança dinâmica criada no servidor pelo Banco Inter, com expiração imposta pelo banco e 5% de desconto à vista. |
+| **PIX** | Cobrança dinâmica criada no servidor via InfinitePay (0% de taxa, aceita MEI e PJ), com 5% de desconto à vista. |
 | **Entrega** | Busca de endereço por CEP via ViaCEP, com preenchimento manual se a API cair. |
 | **Validação** | CPF com dígitos verificadores, e-mail, telefone e CEP. |
 
@@ -164,144 +164,42 @@ manda só o que quer comprar e para onde enviar.
 
 ### Pagamento
 
-Produção usa **PIX dinâmico do Banco Inter**, pela API Pix do Banco Central.
-Receber PIX na conta PJ não tem tarifa, e a API é oficial — não depende de
-sessão do app nem de token que expira sozinho.
+Produção usa **InfinitePay (Checkout PIX com taxa de 0% para MEI e PJ)**.
 
-O servidor cria a cobrança com o total que acabou de recalcular e expiração de
-30 minutos. **A expiração é imposta pelo banco**, e é isso que separa esta
-solução de um BR Code para chave própria: passado o prazo, o Inter recusa o
-pagamento, então a reserva de estoque que vence não deixa para trás um QR Code
-que continua cobrando.
+O servidor cria a cobrança com o total recalculado e expiração de 30 minutos. O checkout seguro é gerado pela API da InfinitePay (`POST /links`), permitindo pagamento instantâneo por PIX ou cartão sem taxas sobre o recebimento Pix.
 
-O `txid` é derivado do número do pedido de forma determinística, o que faz o
-`PUT` ser idempotente: repetir a mesma cobrança devolve a mesma, nunca uma
-segunda. O trecho de hash no fim também funciona como assinatura — um `txid`
-inventado não volta a virar pedido.
+**O webhook e o redirecionamento são avisos, não prova.** Qualquer um pode fazer POST na URL, então a notificação só serve para informar quais coordenadas de transação (`order_nsu`, `transaction_nsu`, `slug`) consultar. Quem confirma o pagamento com certeza criptográfica é a consulta que o servidor faz diretamente na API da InfinitePay (`POST /payment_check`) com as credenciais do lojista.
 
-**O webhook é aviso, não prova.** Qualquer um pode fazer POST na URL, então a
-notificação só serve para dizer *qual* cobrança olhar; quem confirma o pagamento
-é a leitura que o servidor faz no Inter com as próprias credenciais. Um POST
-forjado, no pior caso, faz o servidor reler uma cobrança e concluir que ela não
-foi paga.
+Dinheiro que chega para um pedido que não pode recebê-lo — vencido, cancelado ou com outro valor — vai para `unreconciledPayments` em vez de virar um log e sumir. Só o Mestre lê a lista, e a escrita é exclusiva das funções.
 
-Dinheiro que chega para um pedido que não pode recebê-lo — vencido, cancelado ou
-com outro valor — vai para `unreconciledPayments` em vez de virar um log e sumir.
-Só o Mestre lê a lista, e a escrita é exclusiva das funções.
+#### Configurando a InfinitePay
 
-Como a API Pix é padronizada pelo BACEN, o mesmo código atende Efí, Sicoob ou BB:
-muda URL, credencial e escopo, não a lógica.
+Tudo abaixo é feito uma vez:
 
-#### Recebimento direto, para quem não tem API
+1. **Obtenha seu handle / tag da InfinitePay** (ex: `ciarallo` da sua conta InfinitePay / InfiniteTag).
 
-O Inter só libera API para PJ — **MEI não tem acesso**, e não é menu escondido:
-está na ajuda oficial deles. Todo gateway que aceita MEI cobra percentual sobre a
-venda (Efí 1,19%, Woovi 0,8%, Mercado Pago 0,99%). Receber na própria chave é
-gratuito, e por isso existe o modo direto.
-
-Ligue as três variáveis no ambiente das funções — juntas, ou nada acontece:
-
-```bash
-PIX_DIRECT_KEY=sua-chave-pix
-PIX_DIRECT_MERCHANT_NAME=CAMISETAS INSANAS
-PIX_DIRECT_MERCHANT_CITY=BIGUACU
-```
-
-O BR Code é montado no servidor pelo `pixPayload.ts`, com o valor recalculado e o
-número do pedido na descrição. Sem as três, produção falha fechado: melhor recusar
-a venda do que emitir um QR Code que ninguém consegue honrar.
-
-**O que se perde.** O BR Code é estático, então o banco não impõe a expiração: ele
-segue pagável depois que `expirePendingOrders` devolve o estoque. É exatamente o
-problema que a cobrança `cob` resolve, e quem liga o modo direto aceita conviver
-com ele. A contrapartida é que **nenhuma cobrança direta se confirma sozinha** —
-quem promove o pedido a pago é a conciliação ou o Mestre, na mão.
-
-Pelas regras do BACEN, MEI segue as regras de pessoa física: receber é gratuito
-até ~30 recebimentos/mês, e QR Code **dinâmico** sai da gratuidade. Passado esse
-volume, um PSP passa a valer a pena — e a troca é barata, porque o gateway está
-isolado atrás de cinco funções.
-
-#### Conciliação por extrato
-
-O `nubankGateway` casa pagamentos com pedidos pendentes exigindo **quatro**
-condições ao mesmo tempo: valor exato em centavos, janela de tempo (15 min de
-antecipação, 24h de atraso), transação não vinda do futuro, e o número do pedido
-presente na referência do extrato. Depois descarta tudo que for ambíguo — ID
-repetido no feed, pedido que casa com duas transações, transação que casa com dois
-pedidos. É manual, exclusivo do Mestre, e idempotente por marcador em
-`processedTransactions`.
-
-A referência do pedido é conferida por derivação, não por formato: precisa ser
-`PIX-DIRECT-` mais o `txid` que `interTxId` produz para *aquele* pedido. Como o
-`txid` termina em hash do número do pedido, uma referência não pode ser apontada
-para outro pedido.
-
-Pix que cita um pedido mas não concilia — vencido, cancelado, valor diferente —
-vai para `unreconciledPayments`, a mesma lista do webhook. Pix sem número de
-pedido é movimentação alheia à loja e não é registrado, para não encher a lista de
-ruído nem guardar o nome de quem pagou sem motivo.
-
-A parte frágil continua sendo a **fonte** das transações: ler o extrato por
-raspagem de sessão depende de um token pessoal que expira em silêncio e de
-`User-Agent`/`Origin` forjados contra endpoints internos. O algoritmo de
-conciliação não depende disso — trocar a fonte por um extrato CSV/OFX importado
-não muda uma linha do casamento.
-
-#### Configurando o Inter
-
-Tudo abaixo é feito uma vez, no Internet Banking PJ e no terminal.
-
-1. **Crie a aplicação.** No Internet Banking do Inter (perfil PJ), vá em
-   *Aplicações → Nova aplicação*, marque o escopo de **Pix Cobrança** e conclua.
-   Você recebe `Client ID` e `Client Secret`, e baixa um `.crt` e um `.key` — o
-   certificado de cliente (mTLS). O Inter só conversa com quem apresenta esse par.
-
-2. **Cadastre a chave PIX** que vai receber (a mesma conta da aplicação).
-
-3. **Guarde tudo no Secret Manager.** Nunca em `.env`, nunca no Firestore:
+2. **Guarde o handle no Secret Manager.** Nunca em `.env` público, nunca no Firestore:
 
    ```bash
-   firebase functions:secrets:set INTER_CLIENT_ID
-   firebase functions:secrets:set INTER_CLIENT_SECRET
-   firebase functions:secrets:set INTER_PIX_KEY
-
-   # Os PEM inteiros, incluindo as linhas BEGIN/END:
-   firebase functions:secrets:set INTER_CERTIFICATE < certificado.crt
-   firebase functions:secrets:set INTER_PRIVATE_KEY < chave.key
+   firebase functions:secrets:set INFINITEPAY_HANDLE
    ```
 
-   Se colar o PEM à mão e as quebras de linha virarem `\n` literais, o código
-   normaliza — mas o `<` acima evita o problema de origem.
+3. **Configure as URLs opcionais de ambiente** (se desejar especificar a base da loja e o webhook):
 
-4. **Publique as funções** e pegue a URL do webhook:
+   ```bash
+   INFINITEPAY_PUBLIC_BASE_URL=https://camisetas-imundas-store.web.app
+   INFINITEPAY_WEBHOOK_URL=https://southamerica-east1-SEU-PROJETO.cloudfunctions.net/paymentWebhook
+   ```
+
+4. **Publique as funções:**
 
    ```bash
    firebase deploy --only functions
-   # https://southamerica-east1-SEU-PROJETO.cloudfunctions.net/paymentWebhook
    ```
 
-5. **Registre o webhook no Inter**, associando à sua chave PIX. Pelo próprio
-   Internet Banking, ou pela API:
+5. **Teste com R$ 1,00 de verdade.** Faça um pedido, pague o link de checkout e confirme que o status vira `pago` sozinho.
 
-   ```bash
-   curl --cert certificado.crt --key chave.key \
-     -X PUT "https://cdpj.partners.bancointer.com.br/pix/v2/webhook/SUA-CHAVE-PIX" \
-     -H "Authorization: Bearer SEU_TOKEN" -H "Content-Type: application/json" \
-     -d '{"webhookUrl":"https://southamerica-east1-SEU-PROJETO.cloudfunctions.net/paymentWebhook"}'
-   ```
-
-6. **Teste com R$ 1,00 de verdade.** Faça um pedido, pague o QR Code e confirme
-   que o status vira `pago` sozinho. Se não virar, o log da função diz onde parou
-   — token, certificado ou webhook.
-
-Para desenvolver contra o sandbox, defina `INTER_USE_SANDBOX=true` no ambiente
-das funções; o host vira `cdpj-sandbox.partners.uatinter.co`. Nunca por acidente:
-a variável é explícita justamente para o sandbox não vazar para produção.
-
-Sem as cinco credenciais, `placeOrder` **recusa criar o pedido** em produção, em
-vez de gerar um QR Code que ninguém consegue honrar. No emulador, o BR Code de
-teste usa uma chave deliberadamente não pagável.
+Sem o `INFINITEPAY_HANDLE`, `placeOrder` **recusa criar o pedido** em produção para evitar emitir links inválidos. No emulador, uma URL simulada e pagamentos de teste podem ser mockados via `INFINITEPAY_EMULATOR_PAID_ORDERS`.
 
 ### Emuladores
 
@@ -332,23 +230,13 @@ regras de Storage. Usa o SDK
 4. **Configure App Check** com reCAPTCHA Enterprise, preencha
    `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` e habilite a fiscalização no console.
    `placeOrder` e `lookupOrders` exigem App Check por padrão fora do emulador.
-5. **Cadastre os segredos do pagamento** sem colocá-los em `.env` ou no
-   Firestore — veja [Configurando o Inter](#configurando-o-inter) para o passo a
-   passo completo:
+5. **Cadastre o segredo do pagamento** no Secret Manager:
 
    ```bash
-   firebase functions:secrets:set INTER_CLIENT_ID
-   firebase functions:secrets:set INTER_CLIENT_SECRET
-   firebase functions:secrets:set INTER_PIX_KEY
-   firebase functions:secrets:set INTER_CERTIFICATE < certificado.crt
-   firebase functions:secrets:set INTER_PRIVATE_KEY < chave.key
-   # Somente se a conciliação legada Nubank for publicada:
-   firebase functions:secrets:set NUBANK_ACCESS_TOKEN
+   firebase functions:secrets:set INFINITEPAY_HANDLE
    ```
 
-6. Registre o webhook no Inter apontando para
-   `https://southamerica-east1-SEU-PROJETO.cloudfunctions.net/paymentWebhook`.
-7. Publique:
+6. Publique:
 
    ```bash
    firebase deploy --only firestore:rules,storage:rules
@@ -356,7 +244,7 @@ regras de Storage. Usa o SDK
    npm run build && firebase deploy --only hosting
    ```
 
-8. A instalação já existente preserva o Mestre atual. Em projeto novo, provisione
+7. A instalação já existente preserva o Mestre atual. Em projeto novo, provisione
    o primeiro Mestre via Firebase Admin SDK/console em um ambiente confiável. A
    callable de bootstrap é intencionalmente limitada aos emuladores para impedir
    que o primeiro visitante tome a instalação.

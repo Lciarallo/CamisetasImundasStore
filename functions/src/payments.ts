@@ -1,107 +1,48 @@
 /**
- * Cobrança PIX e confirmação de pagamento.
+ * Cobrança PIX e confirmação de pagamento via InfinitePay.
  *
- * O provedor é o Banco Inter, pela API Pix do BACEN. Duas invariantes mandam
- * em tudo aqui:
+ * Taxa de 0% no PIX com suporte nativo a MEI e PJ. Duas invariantes mandam em tudo aqui:
  *
  * 1. **O valor cobrado nasce no servidor.** `orders.ts` calcula o total e passa
  *    para cá; nada de dinheiro vem do navegador.
- * 2. **Webhook é aviso, não prova.** Qualquer um pode fazer POST na URL, então
- *    a notificação só serve para dizer *qual* cobrança olhar. Quem confirma o
- *    pagamento é a leitura que fazemos no Inter com as nossas credenciais.
+ * 2. **Webhook/Redirect é aviso, não prova.** Qualquer um pode chamar a URL, então
+ *    a notificação só serve para dizer *qual* transação olhar. Quem confirma o
+ *    pagamento é a consulta que fazemos na API da InfinitePay (`POST /payment_check`).
  */
 import { createHash } from 'node:crypto';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { onRequest } from 'firebase-functions/v2/https';
 import type { OrderStatus } from './domain.js';
-import { buildPixPayload } from './pixPayload.js';
 import {
-  createInterCharge,
-  fetchInterCharge,
-  interTxId,
-  isInterConfigured,
-  orderIdFromTxId,
-  INTER_SECRETS,
-} from './interGateway.js';
+  checkInfinitePayPayment,
+  createInfinitePayLink,
+  isFirebaseEmulator,
+  isInfinitePayConfigured,
+  INFINITEPAY_SECRETS,
+  type PaymentCoordinates,
+} from './infinitePayGateway.js';
 
 const REGION = 'southamerica-east1';
 const CHARGE_TTL_SECONDS = 30 * 60;
 
 /** Secrets que as funções de cobrança e de webhook precisam ter ligados. */
-export const PAYMENT_RUNTIME_SECRETS = INTER_SECRETS;
+export const PAYMENT_RUNTIME_SECRETS = INFINITEPAY_SECRETS;
 
 export interface ChargeRequest {
   /** Identificador criado pelo backend, depois de o total ser calculado. */
   orderId: string;
   amount: number;
   method: 'pix';
-  customer: { name: string; email: string; cpf: string };
+  customer: { name: string; email: string; cpf: string; phone?: string };
 }
 
 export interface ChargeResult {
-  gateway: 'inter' | 'pix-direto';
+  gateway: 'infinitepay';
   providerRef: string;
   status: 'aprovado' | 'pendente' | 'recusado';
-  payload?: string;
-  expiresAt?: string;
-}
-
-function isFirebaseEmulator(): boolean {
-  return process.env.FUNCTIONS_EMULATOR === 'true' || Boolean(process.env.FIREBASE_EMULATOR_HUB);
-}
-
-/**
- * Recebimento direto na chave da loja, sem PSP no meio.
- *
- * Existe porque MEI não tem acesso à API de cobrança de banco nenhum — o Inter
- * recusa por tipo de conta — e todo gateway que aceita cobra percentual sobre
- * cada venda. Receber na própria chave é gratuito.
- *
- * O preço disso é que o BR Code é estático: o banco não impõe a expiração, então
- * ele segue pagável depois que `expirePendingOrders` devolve o estoque. Quem
- * liga estas variáveis aceita esse risco, e a contrapartida é que **nenhuma
- * cobrança direta se confirma sozinha**: quem promove o pedido a pago é o robô
- * de conciliação ou o Mestre. Dinheiro que chegar para um pedido já vencido cai
- * em `unreconciledPayments`, para estorno ou reativação.
- *
- * As três variáveis são exigidas juntas de propósito: sem todas, falhamos
- * fechado, e ninguém liga cobrança direta por acidente de ambiente.
- */
-function directPixMerchant(): { key: string; merchantName: string; merchantCity: string } | null {
-  const key = process.env.PIX_DIRECT_KEY?.trim();
-  const merchantName = process.env.PIX_DIRECT_MERCHANT_NAME?.trim();
-  const merchantCity = process.env.PIX_DIRECT_MERCHANT_CITY?.trim();
-  if (!key || !merchantName || !merchantCity) return null;
-  return { key, merchantName, merchantCity };
-}
-
-/** BR Code montado aqui mesmo: sem chamada externa, sem tarifa, sem credencial. */
-function directPixCharge(
-  input: ChargeRequest,
-  merchant: { key: string; merchantName: string; merchantCity: string },
-): ChargeResult {
-  const txId = interTxId(input.orderId);
-  const payload = buildPixPayload({
-    key: merchant.key,
-    merchantName: merchant.merchantName,
-    merchantCity: merchant.merchantCity,
-    amount: input.amount,
-    txId,
-    // O número do pedido viaja no BR Code porque é ele que a conciliação procura
-    // na referência do extrato. Sem essa âncora sobraria casar por valor, e dois
-    // pedidos do mesmo preço ficariam indistinguíveis.
-    description: `Pedido ${input.orderId}`,
-  });
-
-  return {
-    gateway: 'pix-direto',
-    providerRef: `PIX-DIRECT-${txId}`,
-    // Nunca 'aprovado': cobrança direta não prova pagamento nenhum.
-    status: 'pendente',
-    payload,
-    expiresAt: new Date(Date.now() + CHARGE_TTL_SECONDS * 1000).toISOString(),
-  };
+  checkoutUrl: string;
+  expiresAt: string;
 }
 
 function cents(value: unknown): number | null {
@@ -126,57 +67,51 @@ function validateChargeRequest(input: ChargeRequest): void {
 }
 
 /**
- * API exclusivamente interna. Não é exportada como Cloud Function: `orders.ts`
- * passa aqui somente o total que acabou de calcular, depois de criar o pedido.
+ * Cria o link de pagamento na InfinitePay.
  */
 export async function createPaymentCharge(input: ChargeRequest): Promise<ChargeResult> {
   validateChargeRequest(input);
+  const amountCents = cents(input.amount);
+  if (amountCents === null) throw new Error('Valor da cobrança inválido.');
 
-  if (!isInterConfigured()) {
-    // Ordem deliberada: PSP primeiro, cobrança direta só se alguém a configurou
-    // por inteiro, emulador por último. Produção sem nenhum dos dois falha
-    // fechado — melhor recusar a venda do que emitir um QR Code que ninguém
-    // consegue honrar.
-    const merchant = directPixMerchant();
-    if (merchant) {
-      const charge = directPixCharge(input, merchant);
-      logger.info('Cobrança PIX direta criada', {
-        orderId: input.orderId,
-        providerRef: charge.providerRef,
-      });
-      return charge;
-    }
+  const expiresAt = new Date(Date.now() + CHARGE_TTL_SECONDS * 1000).toISOString();
 
+  if (!isInfinitePayConfigured()) {
     if (!isFirebaseEmulator()) {
-      throw new Error('O provedor de cobrança PIX não está configurado.');
+      throw new Error('O provedor de cobrança InfinitePay não está configurado.');
     }
-    // A suíte local não pode depender de chave real: esta é deliberadamente
-    // não pagável.
-    const charge = directPixCharge(input, {
-      key: 'pix-emulador@example.invalid',
-      merchantName: 'CAMISETAS TESTE',
-      merchantCity: 'BRASILIA',
-    });
-    logger.info('Cobrança PIX simulada criada (emulador)', {
+
+    const mockCheckoutUrl = `https://checkout.infinitepay.io/mock/${input.orderId}`;
+    logger.info('Link de pagamento simulado criado (emulador)', {
       orderId: input.orderId,
-      providerRef: charge.providerRef,
+      checkoutUrl: mockCheckoutUrl,
     });
-    return charge;
+
+    return {
+      gateway: 'infinitepay',
+      providerRef: input.orderId,
+      status: 'pendente',
+      checkoutUrl: mockCheckoutUrl,
+      expiresAt,
+    };
   }
 
-  const charge = await createInterCharge({
+  const checkoutUrl = await createInfinitePayLink({
     orderId: input.orderId,
-    amount: input.amount,
-    expirationSeconds: CHARGE_TTL_SECONDS,
-    customer: { name: input.customer.name, cpf: input.customer.cpf },
+    amountCents,
+    customer: {
+      name: input.customer.name,
+      email: input.customer.email,
+      phone: input.customer.phone,
+    },
   });
 
   return {
-    gateway: 'inter',
-    providerRef: charge.txid,
-    status: charge.status,
-    payload: charge.payload,
-    expiresAt: charge.expiresAt,
+    gateway: 'infinitepay',
+    providerRef: input.orderId,
+    status: 'pendente',
+    checkoutUrl,
+    expiresAt,
   };
 }
 
@@ -196,39 +131,34 @@ class WebhookError extends Error {
 interface VerifiedPixPayment {
   orderId: string;
   providerRef: string;
-  transactionAmount: number;
+  transactionAmountCents: number;
+  captureMethod?: string | null;
   by: string;
 }
 
 /**
  * Guarda um pagamento confirmado que não achou pedido em condição de recebê-lo.
- *
- * Sem isto o dinheiro sumiria: o webhook responderia um erro, o Inter desistiria
- * depois das retentativas, e ninguém saberia que entrou dinheiro sem pedido. A
- * lista aparece no painel para alguém resolver — estornar ou reativar.
  */
 export async function recordUnreconciled(
-  provider: 'inter' | 'nubank',
+  provider: 'infinitepay',
   providerRef: string,
   detail: Record<string, unknown>,
 ): Promise<void> {
   const db = getFirestore();
   await db
     .collection('unreconciledPayments')
-    // O provedor entra no hash porque referências de origens diferentes podem
-    // colidir; e para o Inter o id continua o mesmo de antes.
     .doc(createHash('sha256').update(`${provider}:${providerRef}`).digest('hex'))
     .set(
       { providerRef, provider, detectedAt: new Date().toISOString(), ...detail },
       { merge: true },
     );
-  logger.warn('Pagamento PIX recebido sem pedido apto', { provider, providerRef, ...detail });
+  logger.warn('Pagamento recebido sem pedido apto', { provider, providerRef, ...detail });
 }
 
 /** Valida pedido e pagamento na mesma transação que promove o status. */
-async function markVerifiedPixPaid(payment: VerifiedPixPayment): Promise<'paid' | 'already-paid'> {
-  const paidCents = cents(payment.transactionAmount);
-  if (paidCents === null) throw new WebhookError(422, 'Valor do pagamento inválido.');
+export async function markVerifiedPaymentPaid(
+  payment: VerifiedPixPayment,
+): Promise<'paid' | 'already-paid'> {
   if (
     !/^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$/.test(payment.orderId) ||
     payment.providerRef.length > 160
@@ -240,7 +170,7 @@ async function markVerifiedPixPaid(payment: VerifiedPixPayment): Promise<'paid' 
   const ref = db.collection('orders').doc(payment.orderId);
   const eventRef = db
     .collection('paymentEvents')
-    .doc(createHash('sha256').update(`inter:${payment.providerRef}`).digest('hex'));
+    .doc(createHash('sha256').update(`infinitepay:${payment.providerRef}`).digest('hex'));
 
   return db.runTransaction(async (tx) => {
     const [snap, eventSnap] = await tx.getAll(ref, eventRef);
@@ -256,7 +186,7 @@ async function markVerifiedPixPaid(payment: VerifiedPixPayment): Promise<'paid' 
     if (order.payment?.method !== 'pix') {
       throw new WebhookError(409, 'O pedido não foi criado para pagamento PIX.');
     }
-    if (expectedCents === null || expectedCents !== paidCents) {
+    if (expectedCents === null || expectedCents !== payment.transactionAmountCents) {
       throw new WebhookError(409, 'O valor pago não corresponde ao total do pedido.');
     }
     if (order.status !== 'aguardando-pagamento' && order.status !== 'pago') {
@@ -270,16 +200,13 @@ async function markVerifiedPixPaid(payment: VerifiedPixPayment): Promise<'paid' 
       if (eventSnap.exists) return;
       tx.create(eventRef, {
         orderId: payment.orderId,
-        provider: 'inter',
+        provider: 'infinitepay',
         providerRef: payment.providerRef,
         confirmedAt: new Date().toISOString(),
       });
     };
 
     if (order.status === 'pago') {
-      if (order.payment.providerRef && order.payment.providerRef !== payment.providerRef) {
-        throw new WebhookError(409, 'O pedido já foi pago por outra transação.');
-      }
       registerEvent();
       return 'already-paid';
     }
@@ -296,103 +223,112 @@ async function markVerifiedPixPaid(payment: VerifiedPixPayment): Promise<'paid' 
   });
 }
 
-/**
- * Confirma uma cobrança lendo o Inter, e não o corpo da notificação.
- *
- * O txid é derivado do número do pedido, então a volta de txid para pedido é
- * verificada: se o txid recebido não corresponde ao pedido que ele afirma ser,
- * a notificação é forjada.
- */
-async function confirmChargeByTxId(txid: string, orderId: string): Promise<void> {
-  if (interTxId(orderId) !== txid) {
-    throw new WebhookError(422, 'txid não corresponde ao pedido informado.');
-  }
+function parseCoordinates(raw: Record<string, unknown>): PaymentCoordinates | null {
+  const orderId =
+    (typeof raw.order_nsu === 'string' ? raw.order_nsu : null) ??
+    (typeof raw.orderId === 'string' ? raw.orderId : null) ??
+    (typeof raw.order_id === 'string' ? raw.order_id : null);
+  const transactionNsu =
+    (typeof raw.transaction_nsu === 'string' ? raw.transaction_nsu : null) ??
+    (typeof raw.transactionNsu === 'string' ? raw.transactionNsu : null) ??
+    (typeof raw.transaction_id === 'string' ? raw.transaction_id : null) ??
+    (typeof raw.nsu === 'string' ? raw.nsu : null);
+  const slug =
+    (typeof raw.slug === 'string' ? raw.slug : null) ??
+    (typeof raw.id === 'string' ? raw.id : null);
 
-  const proof = await fetchInterCharge(txid);
-  if (!proof.paid) return; // Cobrança criada ou expirada: nada a confirmar.
-  if (proof.amount === null) {
-    throw new WebhookError(422, 'Cobrança liquidada sem valor legível.');
-  }
-
-  const providerRef = proof.endToEndId ?? txid;
-  try {
-    await markVerifiedPixPaid({
-      orderId,
-      providerRef,
-      transactionAmount: proof.amount,
-      by: 'Banco Inter (webhook)',
-    });
-  } catch (cause) {
-    // 409 aqui significa dinheiro recebido para um pedido que não pode aceitá-lo
-    // — vencido, cancelado ou com outro valor. Não pode virar só um log.
-    if (cause instanceof WebhookError && cause.httpStatus === 409) {
-      await recordUnreconciled('inter', providerRef, {
-        txid,
-        orderId,
-        amount: proof.amount,
-        reason: cause.message,
-      });
-      return;
-    }
-    throw cause;
-  }
+  if (!orderId || !transactionNsu || !slug) return null;
+  return { orderId, transactionNsu, slug };
 }
 
-function collectTxIds(body: unknown): string[] {
-  const found = new Set<string>();
-  const entries = (body as { pix?: unknown })?.pix;
-  if (Array.isArray(entries)) {
-    for (const entry of entries) {
-      const txid = (entry as { txid?: unknown })?.txid;
-      if (typeof txid === 'string' && /^[a-zA-Z0-9]{26,35}$/.test(txid)) found.add(txid);
+function collectCoordinates(body: unknown, query: unknown): PaymentCoordinates[] {
+  const list: PaymentCoordinates[] = [];
+
+  if (body && typeof body === 'object') {
+    const direct = parseCoordinates(body as Record<string, unknown>);
+    if (direct) list.push(direct);
+
+    const dataObj = (body as { data?: unknown })?.data;
+    if (dataObj && typeof dataObj === 'object') {
+      const parsedData = parseCoordinates(dataObj as Record<string, unknown>);
+      if (parsedData) list.push(parsedData);
     }
   }
-  const single = (body as { txid?: unknown })?.txid;
-  if (typeof single === 'string' && /^[a-zA-Z0-9]{26,35}$/.test(single)) found.add(single);
-  return [...found];
+
+  if (query && typeof query === 'object') {
+    const queryCoords = parseCoordinates(query as Record<string, unknown>);
+    if (queryCoords) list.push(queryCoords);
+  }
+
+  // Deduplicate
+  const seen = new Set<string>();
+  return list.filter((c) => {
+    const key = `${c.orderId}:${c.transactionNsu}:${c.slug}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-/**
- * Webhook do Inter.
- *
- * Aceita a notificação sem autenticá-la de propósito: ela não decide nada.
- * O corpo só informa quais txids olhar, e cada um é verificado contra a API do
- * Inter antes de qualquer escrita. Um POST forjado, no pior caso, faz o
- * servidor reler uma cobrança e concluir que ela não foi paga.
- */
 export const paymentWebhook = onRequest(
-  { region: REGION, cors: false, secrets: [...INTER_SECRETS] },
+  { region: REGION, cors: true, secrets: [...INFINITEPAY_SECRETS] },
   async (request, response) => {
-    if (request.method !== 'POST') {
-      response.set('Allow', 'POST').status(405).send('Method Not Allowed');
+    if (request.method !== 'POST' && request.method !== 'GET') {
+      response.set('Allow', 'POST, GET').status(405).send('Method Not Allowed');
       return;
     }
 
     try {
-      const txids = collectTxIds(request.body).slice(0, 50);
-      if (txids.length === 0) throw new WebhookError(400, 'Notificação sem txid utilizável.');
-
-      for (const txid of txids) {
-        const orderId = orderIdFromTxId(txid);
-        if (!orderId) {
-          // txid legítimo do Inter que não nasceu aqui: registra e segue.
-          await recordUnreconciled('inter', txid, {
-            txid,
-            reason: 'txid não corresponde a nenhum pedido.',
-          });
-          continue;
-        }
-        await confirmChargeByTxId(txid, orderId);
+      const coordsList = collectCoordinates(request.body, request.query);
+      if (coordsList.length === 0) {
+        throw new WebhookError(
+          400,
+          'Notificação sem coordenadas de pagamento utilizáveis (order_nsu, transaction_nsu, slug).',
+        );
       }
 
-      response.status(200).send('ok');
+      for (const coords of coordsList) {
+        const proof = await checkInfinitePayPayment(coords);
+        if (!proof.paid) {
+          logger.info('Consulta InfinitePay: transação ainda não paga ou recusada', coords);
+          continue;
+        }
+
+        if (proof.amountCents === null) {
+          throw new WebhookError(422, 'Transação liquidada sem valor legível.');
+        }
+
+        try {
+          await markVerifiedPaymentPaid({
+            orderId: coords.orderId,
+            providerRef: coords.transactionNsu,
+            transactionAmountCents: proof.amountCents,
+            captureMethod: proof.captureMethod,
+            by: 'InfinitePay (webhook)',
+          });
+        } catch (cause) {
+          if (cause instanceof WebhookError && cause.httpStatus === 409) {
+            await recordUnreconciled('infinitepay', coords.transactionNsu, {
+              coords,
+              amountCents: proof.amountCents,
+              reason: cause.message,
+            });
+            continue;
+          }
+          throw cause;
+        }
+      }
+
+      response.status(200).json({ ok: true });
     } catch (error) {
       const status = error instanceof WebhookError ? error.httpStatus : 500;
       logger.warn('Webhook de pagamento rejeitado', {
         httpStatus: status,
         reason: error instanceof Error ? error.message : 'erro desconhecido',
       });
-      response.status(status).send(status === 500 ? 'Internal Server Error' : 'Webhook rejected');
+      response
+        .status(status)
+        .send(status === 500 ? 'Internal Server Error' : (error as Error).message);
     }
   },
 );

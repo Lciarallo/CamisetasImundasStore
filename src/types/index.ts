@@ -198,8 +198,14 @@ export interface Order {
   total: number;
   payment: {
     method: PaymentMethod;
-    /** BR Code da cobrança, devolvido pelo servidor depois de o pedido existir. */
+    gateway?: 'infinitepay' | 'local' | null;
+    status?: 'pendente' | 'aprovado' | 'recusado' | 'erro';
+    /** URL de checkout da InfinitePay gerada para o pedido. */
+    checkoutUrl?: string;
+    /** Código PIX caso disponível */
     pixCode?: string;
+    providerRef?: string;
+    expiresAt?: string;
   };
   coupon?: string;
   trackingCode?: string;
