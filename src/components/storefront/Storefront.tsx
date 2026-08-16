@@ -89,6 +89,11 @@ export function Storefront({
   const scrollToCatalog = () =>
     document.getElementById('catalogo')?.scrollIntoView({ behavior: 'smooth' });
 
+  const handleCategory = (value: Category | 'Todos') => {
+    setCategory(value);
+    scrollToCatalog();
+  };
+
   const handleAdd = (productId: string, size: Size, quantity = 1) => {
     addToCart(productId, size, quantity);
     setCartOpen(true);
@@ -101,7 +106,7 @@ export function Storefront({
         search={search}
         onSearch={setSearch}
         category={category}
-        onCategory={setCategory}
+        onCategory={handleCategory}
         onOpenCart={() => setCartOpen(true)}
         onOpenAdmin={onOpenAdmin}
         onOpenCustomerPortal={() => setPortalOpen(true)}
