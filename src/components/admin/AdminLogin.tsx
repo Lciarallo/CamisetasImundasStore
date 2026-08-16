@@ -45,7 +45,7 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
             </span>
             <h1 className="heading-carved mt-5 text-xs text-bone">Câmara dos Mestres</h1>
             <p className="mt-1.5 text-[0.7rem] text-grave">
-              Acesso restrito ao painel da Camisetas Insanas
+              Acesso restrito ao painel da Camisetas Imundas
             </p>
           </div>
 

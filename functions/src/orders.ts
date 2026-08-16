@@ -187,7 +187,7 @@ export const placeOrder = onCall(
   {
     region: REGION,
     enforceAppCheck: APP_CHECK_ENABLED,
-    secrets: [...PAYMENT_RUNTIME_SECRETS, ...RESEND_SECRETS],
+    secrets: Array.from(new Set([...PAYMENT_RUNTIME_SECRETS, ...RESEND_SECRETS])),
   },
   async (request) => {
     const input = parseInput(request.data);

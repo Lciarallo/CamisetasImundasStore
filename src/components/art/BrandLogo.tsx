@@ -1,12 +1,12 @@
 import logoUrl from '../../assets/logo-marca.webp';
 
-/** Proporção real do arquivo, medida no recorte do traço. */
-const ASPECT = 1.306;
+/** Proporção real do arquivo (1024x1024). */
+const ASPECT = 1;
 
 /**
- * A marca: "CAMISETAS INSANAS" com o pentagrama atravessando o texto.
+ * A marca: "CAMISETAS IMUNDAS" com o pentagrama atravessando o texto.
  *
- * O arquivo original é preto sobre branco. Aqui ele entra como `mask-image`,
+ * O arquivo original é preto sobre transparente. Aqui ele entra como `mask-image`,
  * com o alfa vindo do próprio traço — assim a cor sai do `background-color` e
  * o mesmo arquivo serve de osso no cabeçalho e de sangue quando precisa
  * destacar, sem manter duas versões da imagem.
@@ -19,7 +19,7 @@ export function BrandLogo({
    * porque vem de `aspect-ratio`, não de um cálculo fixo.
    */
   height,
-  title = 'Camisetas Insanas',
+  title = 'Camisetas Imundas',
 }: {
   className?: string;
   height?: number;
@@ -60,9 +60,9 @@ export function BrandWordmark({
       className={`font-display font-black tracking-[0.06em] whitespace-nowrap ${className}`}
       style={{ fontSize: size }}
       role="img"
-      aria-label="Camisetas Insanas"
+      aria-label="Camisetas Imundas"
     >
-      CAMISETAS INSANAS
+      CAMISETAS IMUNDAS
     </span>
   );
 }

@@ -28,7 +28,9 @@ const REGION = 'southamerica-east1';
 const CHARGE_TTL_SECONDS = 30 * 60;
 
 /** Secrets que as funções de cobrança e de webhook precisam ter ligados. */
-export const PAYMENT_RUNTIME_SECRETS = [...INFINITEPAY_SECRETS, ...RESEND_SECRETS];
+export const PAYMENT_RUNTIME_SECRETS = Array.from(
+  new Set([...INFINITEPAY_SECRETS, ...RESEND_SECRETS]),
+);
 
 export interface ChargeRequest {
   /** Identificador criado pelo backend, depois de o total ser calculado. */
