@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  FileText,
   Package,
   Search,
   Truck,
@@ -19,6 +20,7 @@ import {
 import { useStore } from '../../store/StoreContext';
 import { TeeArtwork } from '../art/TeeArtwork';
 import { InfinitePayPanel } from '../checkout/InfinitePayPanel';
+import { InvoiceModal } from '../fiscal/InvoiceModal';
 
 const STEPS: { status: OrderStatus; label: string }[] = [
   { status: 'aguardando-pagamento', label: 'Pedido Criado' },
@@ -36,6 +38,7 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [searched, setSearched] = useState(false);
   const [selectedPixOrder, setSelectedPixOrder] = useState<Order | null>(null);
+  const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
   const [copiedTracking, setCopiedTracking] = useState<string | null>(null);
 
   // Carrega automaticamente os pedidos salvos no navegador do cliente
@@ -289,6 +292,28 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
                   </div>
                 )}
 
+                {/* Nota Fiscal Eletrônica (DANFE) */}
+                {order.status !== 'aguardando-pagamento' && order.status !== 'cancelado' && (
+                  <div className="my-3 flex flex-wrap items-center justify-between gap-3 border border-emerald-500/40 bg-emerald-950/20 p-3">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-emerald-400 shrink-0" />
+                      <div>
+                        <p className="heading-carved text-[0.58rem] text-emerald-400">Nota Fiscal Eletrônica (DANFE)</p>
+                        <p className="text-[0.68rem] text-parchment">
+                          NF-e emitida e associada ao pagamento · 100% Algodão
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedInvoiceOrder(order)}
+                      className="btn btn-ghost border-emerald-500/50 text-xs text-emerald-300 hover:bg-emerald-500/20 hover:text-white"
+                    >
+                      Visualizar / Imprimir NF-e
+                    </button>
+                  </div>
+                )}
+
                 {/* Código de Rastreio */}
                 {order.trackingCode && (
                   <div className="my-3 flex flex-wrap items-center justify-between gap-3 border border-smoke bg-pitch p-3">
@@ -412,6 +437,13 @@ export function CustomerPortal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           </div>
+        )}
+        {/* Modal de Nota Fiscal Eletrônica (DANFE) */}
+        {selectedInvoiceOrder && (
+          <InvoiceModal
+            order={selectedInvoiceOrder}
+            onClose={() => setSelectedInvoiceOrder(null)}
+          />
         )}
       </div>
     </div>

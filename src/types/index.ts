@@ -183,6 +183,28 @@ export interface Customer {
   phone: string;
 }
 
+export interface OrderInvoice {
+  number: string;
+  series: string;
+  accessKey: string;
+  issuedAt: string;
+  authorizationProtocol: string;
+  documentType: 'NF-e' | 'DANFE';
+  emitter: {
+    name: string;
+    state: string;
+    tradeName: string;
+  };
+  buyer: {
+    name: string;
+    cpf: string;
+  };
+  totalAmount: number;
+  paymentMethod: string;
+  paymentRef?: string;
+  ncm: string;
+}
+
 export interface Order {
   id: string;
   /** Entregue somente na criação do pedido para consultas públicas autenticadas. */
@@ -209,6 +231,7 @@ export interface Order {
   };
   coupon?: string;
   trackingCode?: string;
+  invoice?: OrderInvoice;
   /** Histórico de mudanças de status, para a timeline do admin. */
   history: { status: OrderStatus; at: string; by?: string }[];
 }

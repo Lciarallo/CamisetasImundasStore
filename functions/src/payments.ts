@@ -23,6 +23,7 @@ import {
   type PaymentCoordinates,
 } from './infinitePayGateway.js';
 import { sendOrderStatusEmail, RESEND_SECRETS } from './emailService.js';
+import { generateNFeData } from './nfe.js';
 
 const REGION = 'southamerica-east1';
 const CHARGE_TTL_SECONDS = 30 * 60;
@@ -216,8 +217,10 @@ export async function markVerifiedPaymentPaid(
 
     registerEvent();
     const now = new Date().toISOString();
+    const invoice = generateNFeData(payment.orderId, snap.data() || {}, now);
     tx.update(ref, {
       status: 'pago',
+      invoice,
       'payment.status': 'aprovado',
       'payment.settlementRef': payment.providerRef,
       history: FieldValue.arrayUnion({ status: 'pago', at: now, by: payment.by }),

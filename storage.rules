@@ -10,24 +10,24 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    function signedIn() {
+      return request.auth != null;
+    }
+
     function can(permission) {
-      return request.auth != null
-        && firestore.get(
-          /databases/(default)/documents/adminUsers/$(request.auth.uid)
-        ).data.active == true
-        && firestore.get(
-          /databases/(default)/documents/adminUsers/$(request.auth.uid)
-        ).data.permissions is list
-        && permission in firestore.get(
-          /databases/(default)/documents/adminUsers/$(request.auth.uid)
-        ).data.permissions;
+      return signedIn()
+        && request.auth.token.active == true
+        && (
+          (request.auth.token.perms is list && permission in request.auth.token.perms)
+          || request.auth.token.role == 'mestre'
+        );
     }
 
     match /products/{productId}/{fileName} {
       allow read: if true;
 
       allow write: if can('products.edit')
-        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp|avif)');
 
       allow delete: if can('products.edit');

@@ -124,37 +124,34 @@ export function useFirebaseBackend(): StoreValue {
     let unsubProducts: (() => void) | undefined;
     let unsubCoupons: (() => void) | undefined;
 
-    const timer = setTimeout(() => {
-      void loadFirestore().then(({ db, collection, query, where, onSnapshot }) => {
-        if (cancelled) return;
-        const base = collection(db, 'products');
-        const q = session ? query(base) : query(base, where('active', '==', true));
+    void loadFirestore().then(({ db, collection, query, where, onSnapshot }) => {
+      if (cancelled) return;
+      const base = collection(db, 'products');
+      const q = session ? query(base) : query(base, where('active', '==', true));
 
-        unsubProducts = onSnapshot(
-          q,
-          (snap) => {
-            const list = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Product);
-            setProducts(list);
-            setProductsReady(true);
-            setError(null);
-          },
-          (cause) => {
-            setProductsReady(true);
-            setError(`Catálogo indisponível: ${cause.message}`);
-          },
-        );
+      unsubProducts = onSnapshot(
+        q,
+        (snap) => {
+          const list = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Product);
+          setProducts(list);
+          setProductsReady(true);
+          setError(null);
+        },
+        (cause) => {
+          setProductsReady(true);
+          setError(`Catálogo indisponível: ${cause.message}`);
+        },
+      );
 
-        unsubCoupons = onSnapshot(
-          query(collection(db, 'coupons'), where('active', '==', true)),
-          (snap) => setCoupons(snap.docs.map((doc) => ({ code: doc.id, ...doc.data() }) as Coupon)),
-          () => setCoupons([]),
-        );
-      });
-    }, 400);
+      unsubCoupons = onSnapshot(
+        query(collection(db, 'coupons'), where('active', '==', true)),
+        (snap) => setCoupons(snap.docs.map((doc) => ({ code: doc.id, ...doc.data() }) as Coupon)),
+        () => setCoupons([]),
+      );
+    });
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
       unsubProducts?.();
       unsubCoupons?.();
     };

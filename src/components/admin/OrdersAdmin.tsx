@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Hammer, Mail, Search, Truck, X } from 'lucide-react';
+import { FileText, Hammer, Mail, Search, Truck, X } from 'lucide-react';
 import {
   ORDER_STATUS_FLOW,
   ORDER_STATUS_LABEL,
@@ -10,6 +10,7 @@ import { formatDateTime, money, normalize, timeAgo } from '../../lib/format';
 import { useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
 import { TeeImage } from '../art/TeeImage';
+import { InvoiceModal } from '../fiscal/InvoiceModal';
 
 const FILTERS: (OrderStatus | 'todos')[] = [
   'todos',
@@ -199,6 +200,7 @@ function OrderDetail({
   onTracking: (code: string) => void;
 }) {
   const [tracking, setTracking] = useState(order.trackingCode ?? '');
+  const [showInvoice, setShowInvoice] = useState(false);
   const [emailSending, setEmailSending] = useState<string | null>(null);
   const [emailMessage, setEmailMessage] = useState<string | null>(null);
 
@@ -384,6 +386,44 @@ function OrderDetail({
             </dl>
           </section>
 
+          {/* Nota Fiscal Eletrônica */}
+          <section>
+            <div className="flex items-center justify-between">
+              <p className="label mb-0">Nota Fiscal Eletrônica (DANFE)</p>
+              {order.status !== 'aguardando-pagamento' && order.status !== 'cancelado' && (
+                <span className="tag border-emerald-500 bg-emerald-950/40 text-emerald-300 text-[0.6rem]">
+                  Emitida
+                </span>
+              )}
+            </div>
+            <div className="mt-2 space-y-2 border border-smoke p-3">
+              {order.status === 'aguardando-pagamento' || order.status === 'cancelado' ? (
+                <p className="text-[0.68rem] text-grave">
+                  A Nota Fiscal é emitida automaticamente assim que o pagamento for aprovado.
+                </p>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-mono text-xs font-bold text-bone">
+                      {order.invoice?.number ? `NF-e Nº ${order.invoice.number}` : `NF-e (DANFE)`}
+                    </p>
+                    <p className="text-[0.62rem] text-grave">
+                      Série {order.invoice?.series || '1'} · 100% Algodão · NCM 6109.10.00
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowInvoice(true)}
+                    className="btn btn-blood px-3 py-1.5 text-xs inline-flex items-center gap-1.5"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Visualizar DANFE
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+
           {/* Cliente */}
           <section>
             <p className="label">Cliente e entrega</p>
@@ -477,6 +517,11 @@ function OrderDetail({
           </section>
         </div>
       </aside>
+
+      {/* Modal de Impressão e Visualização de DANFE */}
+      {showInvoice && (
+        <InvoiceModal order={order} onClose={() => setShowInvoice(false)} />
+      )}
     </div>
   );
 }

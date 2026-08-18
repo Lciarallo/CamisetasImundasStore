@@ -161,7 +161,7 @@ export function CartDrawer({ open, onClose, onCheckout }: CartDrawerProps) {
                         <div className="inline-flex items-center border border-iron">
                           <button
                             onClick={() => setCartQuantity(index, item.quantity - 1)}
-                            className="px-2 py-1 text-parchment hover:text-blood-bright"
+                            className="px-2.5 py-1.5 sm:px-2 sm:py-1 text-parchment hover:text-blood-bright active:scale-90 transition-transform"
                             aria-label="Diminuir"
                           >
                             <Minus className="h-3 w-3" />
@@ -171,7 +171,7 @@ export function CartDrawer({ open, onClose, onCheckout }: CartDrawerProps) {
                           </span>
                           <button
                             onClick={() => setCartQuantity(index, item.quantity + 1)}
-                            className="px-2 py-1 text-parchment hover:text-blood-bright"
+                            className="px-2.5 py-1.5 sm:px-2 sm:py-1 text-parchment hover:text-blood-bright active:scale-90 transition-transform"
                             aria-label="Aumentar"
                           >
                             <Plus className="h-3 w-3" />

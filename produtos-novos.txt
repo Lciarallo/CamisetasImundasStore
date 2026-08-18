@@ -1,0 +1,127 @@
+CAMISETAS NOVAS — texto pronto para cadastrar no painel /admin
+================================================================
+Fotos já cortadas (frente/costas) e prontas, em /tmp/tee-crops/:
+  mutilator-front.jpg
+  emperor-front.jpg / emperor-back.jpg
+  blasphemy-front.jpg / blasphemy-back.jpg
+  summoning-front.jpg / summoning-back.jpg
+  anfibia-front.jpg / anfibia-back.jpg
+
+Todas devem ser cadastradas como SOB ENCOMENDA (fulfillment = sob-encomenda),
+tamanhos P/M/G/GG/XGG, e as outras camisetas do catálogo atual devem ser apagadas.
+================================================================
+
+
+1) MUTILATION — Satanist Styrken
+--------------------------------
+Banda: Mutilation
+Categoria: Camiseta
+Preço: R$ 67,90 (De R$ 80,00)
+Tag: Reissue
+Fabric/tom (só usado se a foto sumir): off-white / bone / skull
+
+Descrição:
+Estampa clássica do tape "Satanist Styrken" —
+colagem de jornal e retrato encapuzado, como manda o culto oitentista.
+Impressão em algodão branco, peça só de frente.
+
+Detalhes:
+- Algodão 100% penteado 180g/m²
+- Serigrafia preta de alto contraste, só na frente
+- Estampa de alta definição e durabilidade
+- Produzida sob encomenda após a compra
+
+Sob encomenda: sim | Tamanhos: P M G GG XGG | Prazo: 10 dias úteis
+Fotos: mutilator-front.jpg (só frente)
+
+
+2) EMPEROR — Brasão 1991
+--------------------------------
+Banda: Emperor
+Categoria: Camiseta
+Preço: R$ 179,90
+Tag: Reissue
+Fabric/tom: preto / bone / heptagram
+
+Descrição:
+Estampa com a hidra coroada na frente e o brasão heráldico
+completo nas costas, com o ano de fundação da banda. Traço fino em branco
+sobre preto.
+
+Detalhes:
+- Algodão 100% penteado 190g/m²
+- Serigrafia branca de traço fino, frente e costas
+- Estampa de alta definição e durabilidade
+- Produzida sob encomenda após a compra
+
+Sob encomenda: sim | Tamanhos: P M G GG XGG | Prazo: 15 dias úteis
+Fotos: emperor-front.jpg (capa) + emperor-back.jpg
+
+
+3) BLASPHEMY — Fallen Angel of Doom
+--------------------------------
+Banda: Blasphemy
+Categoria: Camiseta
+Preço: R$ 169,90
+Tag: Reissue
+Fabric/tom: preto / blood / pentagram
+
+Descrição:
+Estampa da capa do álbum de estreia: o arqueiro alado na
+frente, o demônio vermelho e a letra completa nas costas. Vermelho sangue
+sobre preto, sem meio-tom.
+
+Detalhes:
+- Algodão 100% penteado 185g/m²
+- Serigrafia em vermelho e branco, frente e costas
+- Estampa de alta definição e durabilidade
+- Produzida sob encomenda após a compra
+
+Sob encomenda: sim | Tamanhos: P M G GG XGG | Prazo: 12 dias úteis
+Fotos: blasphemy-front.jpg (capa) + blasphemy-back.jpg
+
+
+4) SUMMONING — Let Mortal Heroes Sing Your Fame
+--------------------------------
+Banda: Summoning
+Categoria: Camiseta
+Preço: R$ 189,90
+Tag: Reissue
+Fabric/tom: preto / bone / moon
+
+Descrição:
+Estampa da arte do álbum: sigilo e paisagem em laranja
+queimado na frente, anel com escrita élfica gravado nas costas. Para quem
+leva o épico a sério.
+
+Detalhes:
+- Algodão 100% penteado 185g/m²
+- Serigrafia em laranja sobre preto, frente e costas
+- Estampa de alta definição e durabilidade
+- Produzida sob encomenda após a compra
+
+Sob encomenda: sim | Tamanhos: P M G GG XGG | Prazo: 18 dias úteis
+Fotos: summoning-front.jpg (capa) + summoning-back.jpg
+
+
+5) ANFÍBIA — I Hate What's On The Other Side
+--------------------------------
+Banda: Anfíbia
+Categoria: Camiseta
+Preço: R$ 154,90
+Tag: Lançamento
+Fabric/tom: preto / bone / eye
+
+Descrição:
+Estampa autoral em pictogramas — sapos, larvas e formas geométricas
+compondo o logotipo — com retrato granulado na frente e o grito
+"I hate what's on the other side" nas costas.
+
+Detalhes:
+- Algodão 100% penteado 180g/m²
+- Serigrafia branca de alto contraste, frente e costas
+- Peça autoral, tiragem sob encomenda
+- Produzida sob encomenda após a compra
+
+Sob encomenda: sim | Tamanhos: P M G GG XGG | Prazo: 14 dias úteis
+Fotos: anfibia-front.jpg (capa) + anfibia-back.jpg

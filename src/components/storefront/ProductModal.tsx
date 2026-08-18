@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Check, Hammer, Minus, Plus, Truck, X } from 'lucide-react';
+import { Check, Hammer, Minus, Plus, Share2, Truck, X } from 'lucide-react';
 import type { Product, Size } from '../../types';
 import { money } from '../../lib/format';
+import { shareProduct } from '../../lib/share';
 import { availableFor, sizesFor } from '../../store/StoreContext';
 import { TeeImage } from '../art/TeeImage';
 
@@ -9,6 +10,7 @@ interface ProductModalProps {
   product: Product | null;
   onClose: () => void;
   onAddToCart: (productId: string, size: Size, quantity: number) => void;
+  onSelectBand?: (band: string) => void;
 }
 
 /** Medidas reais de camiseta — evita a devolução mais comum de e-commerce. */
@@ -20,11 +22,17 @@ const SIZE_CHART: Record<Size, { chest: number; length: number }> = {
   XGG: { chest: 62, length: 78 },
 };
 
-export function ProductModal({ product, onClose, onAddToCart }: ProductModalProps) {
+export function ProductModal({
+  product,
+  onClose,
+  onAddToCart,
+  onSelectBand,
+}: ProductModalProps) {
   const [size, setSize] = useState<Size | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [activePhoto, setActivePhoto] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   // Reinicia a escolha ao trocar de peça, senão o tamanho anterior vaza.
   useEffect(() => {
@@ -32,6 +40,7 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
     setQuantity(1);
     setAdded(false);
     setActivePhoto(0);
+    setCopied(false);
   }, [product?.id]);
 
   useEffect(() => {
@@ -58,6 +67,14 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
     window.setTimeout(() => setAdded(false), 2000);
   };
 
+  const handleShare = async () => {
+    const res = await shareProduct(product);
+    if (res === 'clipboard') {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
   return (
     <div
       className="anim-fade fixed inset-0 z-70 flex items-end justify-center bg-void/85 backdrop-blur-sm sm:items-center sm:p-6"
@@ -70,15 +87,55 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
         className="panel-raised anim-rise flex max-h-[92vh] w-full max-w-4xl flex-col overflow-y-auto sm:max-h-[88vh]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-smoke bg-crypt/95 px-5 py-3 backdrop-blur">
-          <p className="heading-carved text-[0.6rem] text-blood-bright">{product.band}</p>
-          <button
-            onClick={onClose}
-            className="text-grave hover:text-bone"
-            aria-label="Fechar detalhes"
-          >
-            <X className="h-5 w-5" />
-          </button>
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-smoke bg-crypt/95 px-4 sm:px-5 py-3 backdrop-blur shadow-md">
+          {onSelectBand ? (
+            <button
+              type="button"
+              onClick={() => {
+                onSelectBand(product.band);
+                onClose();
+              }}
+              className="heading-carved text-[0.65rem] sm:text-[0.6rem] text-blood-bright transition-colors hover:text-bone hover:underline"
+              title={`Filtrar catálogo por ${product.band}`}
+            >
+              {product.band}
+            </button>
+          ) : (
+            <p className="heading-carved text-[0.65rem] sm:text-[0.6rem] text-blood-bright">{product.band}</p>
+          )}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={handleShare}
+              className="flex items-center gap-1.5 border border-iron/80 bg-pitch/60 px-2.5 py-1.5 text-xs text-parchment transition-colors hover:border-blood hover:text-bone active:scale-95"
+              title={copied ? 'Link copiado!' : 'Compartilhar link desta peça'}
+              aria-label="Compartilhar link da camiseta"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  <span className="text-emerald-400 font-medium">Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="h-3.5 w-3.5 text-blood-bright" />
+                  <span className="hidden xs:inline">Compartilhar</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+              }}
+              className="flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center rounded border border-iron bg-pitch text-bone transition-all hover:border-blood hover:bg-blood hover:text-white active:scale-90"
+              aria-label="Fechar detalhes da camiseta"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="grid gap-0 md:grid-cols-2">
@@ -92,17 +149,17 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
 
             {/* Galeria — só aparece quando há mais de uma foto */}
             {product.photos.length > 1 && (
-              <div className="mx-auto mt-4 flex max-w-sm flex-wrap gap-2">
+              <div className="mx-auto mt-4 flex max-w-sm overflow-x-auto pb-1 gap-2 scrollbar-none">
                 {product.photos.map((photo, index) => (
                   <button
                     key={index}
                     onClick={() => setActivePhoto(index)}
                     aria-label={`Ver foto ${index + 1} de ${product.photos.length}`}
                     aria-current={index === activePhoto}
-                    className={`w-16 border transition-colors ${
+                    className={`w-16 shrink-0 border transition-all active:scale-95 ${
                       index === activePhoto
-                        ? 'border-blood'
-                        : 'border-smoke hover:border-iron'
+                        ? 'border-blood ring-1 ring-blood'
+                        : 'border-smoke hover:border-iron opacity-70 hover:opacity-100'
                     }`}
                   >
                     <img
@@ -117,30 +174,30 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
             )}
           </div>
 
-          <div className="flex flex-col gap-5 p-6">
+          <div className="flex flex-col gap-4 sm:gap-5 p-5 sm:p-6">
             <div>
               <h2
                 id="product-modal-title"
-                className="font-display text-xl leading-tight font-bold text-bone"
+                className="font-display text-lg sm:text-xl leading-tight font-bold text-bone"
               >
                 {product.name}
               </h2>
             </div>
 
-            <p className="text-sm leading-relaxed text-parchment">{product.description}</p>
+            <p className="text-xs sm:text-sm leading-relaxed text-parchment">{product.description}</p>
 
-            <div className="border-y border-smoke py-4">
+            <div className="border-y border-smoke py-3 sm:py-4">
               <div className="flex items-baseline gap-3">
                 {product.oldPrice && (
-                  <span className="text-sm text-dust line-through tabular-nums">
+                  <span className="text-xs sm:text-sm text-dust line-through tabular-nums">
                     {money(product.oldPrice)}
                   </span>
                 )}
-                <span className="font-display text-3xl font-bold text-bone tabular-nums">
+                <span className="font-display text-2xl sm:text-3xl font-bold text-bone tabular-nums">
                   {money(product.price)}
                 </span>
               </div>
-              <p className="mt-1 text-xs text-grave tabular-nums">
+              <p className="mt-1 text-[0.68rem] text-grave tabular-nums">
                 {money(product.price * 0.95)} no PIX à vista
               </p>
             </div>
@@ -151,7 +208,7 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
                 <span className="label mb-0">Tamanho</span>
                 {size && (
                   <span className="text-[0.65rem] text-grave tabular-nums">
-                    {SIZE_CHART[size].chest}cm de largura · {SIZE_CHART[size].length}cm de altura
+                    {SIZE_CHART[size].chest}cm largura × {SIZE_CHART[size].length}cm altura
                   </span>
                 )}
               </div>
@@ -168,12 +225,12 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
                         setSize(option);
                         setQuantity(1);
                       }}
-                      className={`min-w-12 border px-3 py-2 font-display text-xs font-bold transition-colors ${
+                      className={`min-w-11 min-h-[42px] border px-3 py-2 font-display text-xs font-bold transition-all active:scale-95 ${
                         selected
-                          ? 'border-blood bg-blood text-bone'
+                          ? 'border-blood bg-blood text-bone shadow-[0_0_10px_rgba(165,18,27,0.4)]'
                           : disabled
                             ? 'cursor-not-allowed border-smoke text-dust line-through'
-                            : 'border-iron text-parchment hover:border-blood-bright'
+                            : 'border-iron text-parchment hover:border-blood-bright hover:text-bone'
                       }`}
                     >
                       {option}
@@ -195,7 +252,7 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
                 <button
                   onClick={() => setQuantity((n) => Math.max(1, n - 1))}
                   disabled={quantity <= 1}
-                  className="px-3 py-2 text-parchment transition-colors hover:text-blood-bright disabled:text-dust"
+                  className="px-3.5 py-2.5 sm:px-3 sm:py-2 text-parchment transition-colors hover:text-blood-bright disabled:text-dust active:scale-95"
                   aria-label="Diminuir quantidade"
                 >
                   <Minus className="h-3.5 w-3.5" />
@@ -206,7 +263,7 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
                 <button
                   onClick={() => setQuantity((n) => Math.min(available || 10, n + 1))}
                   disabled={!size || quantity >= available}
-                  className="px-3 py-2 text-parchment transition-colors hover:text-blood-bright disabled:text-dust"
+                  className="px-3.5 py-2.5 sm:px-3 sm:py-2 text-parchment transition-colors hover:text-blood-bright disabled:text-dust active:scale-95"
                   aria-label="Aumentar quantidade"
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -217,7 +274,7 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
             <button
               onClick={handleAdd}
               disabled={!size}
-              className={`btn w-full ${added ? 'btn-ghost border-blood text-blood-bright' : 'btn-blood'}`}
+              className={`btn w-full py-3.5 sm:py-3 text-sm font-semibold transition-all active:scale-[0.99] ${added ? 'btn-ghost border-blood text-blood-bright' : 'btn-blood'}`}
             >
               {added ? (
                 <>
@@ -252,6 +309,21 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
                   </p>
                 </>
               )}
+            </div>
+
+            {/* Especificação do Tecido */}
+            <div className="border border-iron/80 bg-pitch p-3">
+              <div className="flex items-center justify-between">
+                <span className="heading-carved text-[0.6rem] text-blood-bright uppercase tracking-wider">
+                  Composição Têxtil
+                </span>
+                <span className="tag border-blood bg-blood/20 text-bone text-[0.62rem]">
+                  100% Algodão Puro
+                </span>
+              </div>
+              <p className="mt-1.5 text-[0.72rem] leading-relaxed text-parchment">
+                Malha penteada premium fio 30.1 (180–190g/m²). Toque macio, máxima respirabilidade, costuras reforçadas e serigrafia de alto contraste resistente a lavagens.
+              </p>
             </div>
 
             {/* Ficha técnica */}
@@ -291,6 +363,17 @@ export function ProductModal({ product, onClose, onAddToCart }: ProductModalProp
                 </tbody>
               </table>
             </details>
+
+            {/* Botão de Fechar no final */}
+            <div className="pt-2 border-t border-smoke/40 sm:hidden">
+              <button
+                type="button"
+                onClick={onClose}
+                className="btn btn-ghost w-full py-3 text-xs text-parchment hover:text-bone hover:border-iron active:scale-95"
+              >
+                ← Voltar para o catálogo
+              </button>
+            </div>
           </div>
         </div>
       </div>

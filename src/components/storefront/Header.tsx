@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Menu, Package, Search, ShieldHalf, ShoppingBag, X } from 'lucide-react';
 import { CATEGORIES, type Category } from '../../types';
 import { BrandLogo } from '../art/BrandLogo';
@@ -34,6 +34,23 @@ export function Header({
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === '/' &&
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA'
+      ) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const tabs: (Category | 'Todos')[] = ['Todos', ...CATEGORIES];
 
   return (
@@ -47,7 +64,7 @@ export function Header({
       {/* Faixa de avisos */}
       <div className="border-b border-smoke/60 bg-pitch">
         <p className="heading-carved mx-auto max-w-7xl px-4 py-1.5 text-center text-[0.6rem] text-grave md:px-8">
-          Frete grátis acima de R$ 299 · Envio para todo o Brasil · Sob encomenda em até 20 dias
+          <strong className="text-bone">100% Algodão Penteado Puro</strong> · Serigrafia de Alto Contraste · Frete grátis acima de R$ 299 · Envio para todo o Brasil
         </p>
       </div>
 
@@ -72,13 +89,19 @@ export function Header({
         <div className="relative ml-auto hidden max-w-xs flex-1 items-center md:flex lg:ml-8 lg:max-w-md">
           <Search className="pointer-events-none absolute left-3 h-4 w-4 text-dust" />
           <input
+            ref={searchInputRef}
             type="search"
             value={search}
             onChange={(event) => onSearch(event.target.value)}
             placeholder="Buscar banda ou peça..."
-            className="field pl-9"
+            className="field pl-9 pr-8 font-mono text-xs"
             aria-label="Buscar no catálogo"
           />
+          <div className="pointer-events-none absolute right-2.5 flex items-center">
+            <kbd className="rounded border border-smoke bg-pitch px-1.5 py-0.5 font-mono text-[9px] text-grave">
+              /
+            </kbd>
+          </div>
         </div>
 
         <div className="ml-auto flex items-center gap-1 md:ml-0">

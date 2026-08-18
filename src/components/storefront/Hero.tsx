@@ -8,26 +8,23 @@ export function Hero({ onExplore }: { onExplore: () => void }) {
       className="relative overflow-hidden border-b border-smoke bg-void"
       aria-labelledby="hero-title"
     >
-      {/* Sigilo gigante ao fundo, girando devagar */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.055]">
+      {/* Sigilo ritualístico ao fundo */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.04]">
         <SigilMark
           sigil="pentagram"
           className="h-[130%] w-auto text-bone"
-          strokeWidth={0.6}
+          strokeWidth={0.5}
         />
       </div>
 
-      {/* Névoa subindo do rodapé da seção */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-void to-transparent" />
+      {/* Névoa suave na base */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-void to-transparent" />
 
-      <div className="relative mx-auto max-w-4xl px-4 py-24 text-center md:px-8 md:py-36">
-        <p className="heading-carved anim-fade mb-6 text-[0.62rem] text-blood-bright">
-          Est. MMXIX · Culto ao vinil e ao algodão preto
-        </p>
-
+      <div className="relative mx-auto max-w-4xl px-4 py-16 text-center sm:py-24 md:py-32 md:px-8">
+        {/* Anti-UI-Slop: O H1 é o primeiro elemento textual visível, sem eyebrows decorativos ou dots pulsantes */}
         <h1
           id="hero-title"
-          className="font-logo text-5xl leading-[0.95] text-bone text-engraved sm:text-6xl md:text-8xl"
+          className="font-logo text-4xl leading-[0.95] text-bone text-engraved sm:text-6xl md:text-8xl"
         >
           Vestidos
           <br />
@@ -35,14 +32,22 @@ export function Hero({ onExplore }: { onExplore: () => void }) {
         </h1>
 
         <p
-          className="mx-auto mt-8 max-w-xl text-[0.95rem] leading-relaxed text-parchment"
+          className="mx-auto mt-6 max-w-xl text-sm leading-relaxed text-parchment sm:text-base text-balance"
         >
-          Camisetas, manga longa e moletons de black metal. Serigrafia manual,
-          tiragem curta e peças sob encomenda para quem chegou tarde ao culto.
+          Camisetas de black metal e dark underground em malha <strong className="text-bone font-medium">100% Algodão Penteado Puro (180–190g/m²)</strong>.
+          Serigrafia artesanal de alta durabilidade e peças sob encomenda para o culto.
         </p>
 
+        {/* Cupom de Boas-Vindas limpo e funcional */}
+        <div className="mt-8 flex justify-center">
+          <div className="inline-flex items-center gap-2.5 rounded border border-smoke bg-pitch/90 px-3.5 py-1.5 font-mono text-xs text-parchment">
+            <span className="text-grave">Cupom 10% OFF:</span>
+            <span className="font-semibold text-bone selection:bg-blood">CULTO10</span>
+          </div>
+        </div>
+
         <div
-          className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
+          className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"
         >
           <button onClick={onExplore} className="btn btn-bone w-full sm:w-auto">
             Ver o catálogo
@@ -54,10 +59,10 @@ export function Hero({ onExplore }: { onExplore: () => void }) {
 
         <button
           onClick={onExplore}
-          className="mt-14 inline-flex flex-col items-center gap-2 text-grave transition-colors hover:text-blood-bright"
-          aria-label="Desça para o catálogo"
+          className="mt-14 inline-flex flex-col items-center gap-1.5 text-grave transition-colors hover:text-blood-bright"
+          aria-label="Descer para o catálogo"
         >
-          <span className="heading-carved text-[0.55rem]">Desça</span>
+          <span className="heading-carved text-[0.55rem]">Desça para o acervo</span>
           <ArrowDown className="h-4 w-4 animate-bounce" />
         </button>
       </div>

@@ -13,6 +13,7 @@ import type {
 import { SEED_PRODUCTS } from '../data/products';
 import { PIX_DISCOUNT, SEED_COUPONS, SEED_USERS, generateSeedOrders } from '../data/seed';
 import { usePersistentState, wipeStorage } from '../lib/storage';
+import { createInvoiceForOrder } from '../lib/invoice';
 import { availableFor, computeTotals } from './cart';
 import type { OrderDraft, Result, StoreValue } from './types';
 
@@ -223,18 +224,22 @@ export function useLocalBackend(): StoreValue {
   const updateOrderStatus = useCallback(
     async (orderId: string, status: OrderStatus): Promise<Result> => {
       setOrders((previous) =>
-        previous.map((order) =>
-          order.id === orderId
-            ? {
-                ...order,
-                status,
-                history: [
-                  ...order.history,
-                  { status, at: new Date().toISOString(), by: 'local' },
-                ],
-              }
-            : order,
-        ),
+        previous.map((order) => {
+          if (order.id !== orderId) return order;
+          const updated: Order = {
+            ...order,
+            status,
+            invoice:
+              status !== 'aguardando-pagamento' && status !== 'cancelado' && !order.invoice
+                ? createInvoiceForOrder(order)
+                : order.invoice,
+            history: [
+              ...order.history,
+              { status, at: new Date().toISOString(), by: 'local' },
+            ],
+          };
+          return updated;
+        }),
       );
       return { ok: true, message: 'Status atualizado.' };
     },

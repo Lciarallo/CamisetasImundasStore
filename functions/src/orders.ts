@@ -10,24 +10,21 @@ import {
   type Transaction,
 } from 'firebase-admin/firestore';
 import {
-  FREE_SHIPPING_THRESHOLD,
   MAX_LINES_PER_ORDER,
   MAX_QUANTITY_PER_LINE,
   ORDER_STATUS_FLOW,
-  PIX_DISCOUNT,
-  SHIPPING_COST,
-  round2,
   type CouponDoc,
   type OrderStatus,
   type PaymentMethod,
   type ProductDoc,
   type Size,
-  type StockBySize,
 } from './domain.js';
 import { actorName, requirePermission } from './auth.js';
 import { createPaymentCharge, PAYMENT_RUNTIME_SECRETS } from './payments.js';
 import { enforceRateLimit } from './security.js';
 import { sendOrderStatusEmail, RESEND_SECRETS, type EmailEventType } from './emailService.js';
+import { generateNFeData } from './nfe.js';
+import { calculateOrderMetrics, hashCustomerToken } from './orderEngine.js';
 
 const REGION = 'southamerica-east1';
 const PAYMENT_RESERVATION_MINUTES = 30;
@@ -197,9 +194,7 @@ export const placeOrder = onCall(
     const requestHash = createHash('sha256')
       .update(JSON.stringify(input), 'utf8')
       .digest('hex');
-    const customerAccessTokenHash = createHash('sha256')
-      .update(input.idempotencyKey, 'utf8')
-      .digest('hex');
+    const customerAccessTokenHash = hashCustomerToken(input.idempotencyKey);
     const attemptRef = db.collection('orderRequests').doc(customerAccessTokenHash);
 
     const created = await db.runTransaction(async (tx) => {
@@ -225,102 +220,33 @@ export const placeOrder = onCall(
       const snaps = await tx.getAll(...refs);
 
       let couponDoc: CouponDoc | undefined;
-      let couponCode: string | null = null;
       if (input.coupon) {
         const code = input.coupon.trim().toUpperCase();
         const snap = await tx.get(db.collection('coupons').doc(code));
         if (snap.exists) {
           couponDoc = snap.data() as CouponDoc;
-          couponCode = code;
         }
       }
 
       const counterRef = db.collection('counters').doc('orders');
       const counterSnap = await tx.get(counterRef);
 
-      /* --- 2. Processamento em memória ---------------------------------- */
+      /* --- 2. Processamento em memória via OrderEngine ------------------ */
       const products = new Map<string, ProductDoc>();
       snaps.forEach((snap, index) => {
         const id = uniqueIds[index];
         if (!snap.exists) {
           throw new HttpsError('not-found', `Peça ${id} não existe mais.`);
         }
-        const product = snap.data() as ProductDoc;
-        if (!product.active) {
-          throw new HttpsError('failed-precondition', `"${product.name}" saiu do catálogo.`);
-        }
-        products.set(id, product);
+        products.set(id, snap.data() as ProductDoc);
       });
 
-      const merged = new Map<string, CartLineInput>();
-      for (const item of input.items) {
-        const key = `${item.productId}|${item.size}`;
-        const existing = merged.get(key);
-        const quantity = (existing?.quantity ?? 0) + item.quantity;
-        if (quantity > MAX_QUANTITY_PER_LINE) {
-          throw new HttpsError(
-            'invalid-argument',
-            `Máximo de ${MAX_QUANTITY_PER_LINE} unidades por peça e tamanho.`,
-          );
-        }
-        merged.set(key, { ...item, quantity });
-      }
-
-      const lines = [];
-      const stockUpdates = new Map<string, StockBySize>();
-      let subtotal = 0;
-
-      for (const item of merged.values()) {
-        const product = products.get(item.productId)!;
-        if (product.fulfillment === 'sob-encomenda') {
-          if (!product.madeToOrderSizes.includes(item.size)) {
-            throw new HttpsError(
-              'failed-precondition',
-              `"${product.name}" não é fabricada no tamanho ${item.size}.`,
-            );
-          }
-        } else {
-          const pending = stockUpdates.get(item.productId) ?? { ...product.stock };
-          const available = pending[item.size] ?? 0;
-          if (available < item.quantity) {
-            throw new HttpsError(
-              'failed-precondition',
-              `"${product.name}" tem só ${available} no tamanho ${item.size}.`,
-            );
-          }
-          pending[item.size] = available - item.quantity;
-          stockUpdates.set(item.productId, pending);
-        }
-
-        subtotal += product.price * item.quantity;
-        lines.push({
-          productId: item.productId,
-          name: product.name,
-          band: product.band,
-          art: product.art,
-          photo: product.photos?.[0] ?? null,
-          size: item.size,
-          quantity: item.quantity,
-          unitPrice: product.price,
-          fulfillment: product.fulfillment,
-          productionDays: product.productionDays ?? null,
-        });
-      }
-      subtotal = round2(subtotal);
-
-      let discount = 0;
-      if (couponDoc && couponDoc.active && subtotal >= couponDoc.minSubtotal) {
-        discount = round2((subtotal * couponDoc.percent) / 100);
-      } else {
-        couponCode = null;
-      }
-
-      const afterDiscount = round2(subtotal - discount);
-      const isOnlyTestItem = lines.length === 1 && subtotal <= 1.0;
-      const shipping = isOnlyTestItem || afterDiscount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
-      const beforePayment = round2(afterDiscount + shipping);
-      const pixDiscount = isOnlyTestItem ? 0 : round2(beforePayment * PIX_DISCOUNT);
-      const total = round2(beforePayment - pixDiscount);
+      const metrics = calculateOrderMetrics(
+        input.items,
+        products,
+        couponDoc,
+        input.coupon,
+      );
 
       const next = ((counterSnap.data()?.value as number | undefined) ?? 20_000) + 1;
       const orderId = `INS-${next}`;
@@ -336,11 +262,11 @@ export const placeOrder = onCall(
         status,
         customer: input.customer,
         address: { ...input.address, complement: input.address.complement ?? null },
-        lines,
-        subtotal,
-        discount: round2(discount + pixDiscount),
-        shipping,
-        total,
+        lines: metrics.lines,
+        subtotal: metrics.subtotal,
+        discount: metrics.discount,
+        shipping: metrics.shipping,
+        total: metrics.total,
         payment: {
           method: 'pix' as const,
           gateway: 'infinitepay' as const,
@@ -350,7 +276,7 @@ export const placeOrder = onCall(
           pixCode: null,
           expiresAt: reservationExpiresAt,
         },
-        coupon: couponCode,
+        coupon: metrics.couponCode,
         trackingCode: null,
         reservationExpiresAt,
         inventoryReleasedAt: null,
@@ -361,7 +287,7 @@ export const placeOrder = onCall(
       tx.set(db.collection('orders').doc(orderId), doc);
       tx.set(counterRef, { value: next }, { merge: true });
       tx.create(attemptRef, { orderId, requestHash, createdAt: now });
-      for (const [productId, stock] of stockUpdates) {
+      for (const [productId, stock] of metrics.stockUpdates) {
         tx.update(db.collection('products').doc(productId), { stock });
       }
 
@@ -644,12 +570,19 @@ export const updateOrderStatus = onCall(
       }
 
       const now = new Date().toISOString();
+      const currentData = snap.data() || {};
+      const invoiceData =
+        status === 'pago' && !currentData.invoice
+          ? generateNFeData(orderId, currentData, now)
+          : undefined;
+
       tx.update(ref, {
         status,
         ...(current === 'aguardando-pagamento' && status === 'pago'
           ? {
               'payment.status': 'aprovado',
               'payment.confirmedManually': true,
+              ...(invoiceData ? { invoice: invoiceData } : {}),
             }
           : {}),
         ...(status === 'cancelado' ? { inventoryReleasedAt: now } : {}),
@@ -800,7 +733,7 @@ export const lookupOrders = onCall(
         return { orders: [] };
       }
       const expected = String(order.customerAccessTokenHash ?? '');
-      const received = createHash('sha256').update(accessToken, 'utf8').digest('hex');
+      const received = hashCustomerToken(accessToken);
       const expectedBuffer = Buffer.from(expected, 'hex');
       const receivedBuffer = Buffer.from(received, 'hex');
       if (

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Hammer } from 'lucide-react';
+import { Check, Hammer, Share2 } from 'lucide-react';
 import type { Product, Size } from '../../types';
 import { money } from '../../lib/format';
+import { shareProduct } from '../../lib/share';
 import { availableFor, isSoldOut, sizesFor, totalStock } from '../../store/StoreContext';
 import { TeeImage } from '../art/TeeImage';
 
@@ -9,43 +10,75 @@ interface ProductCardProps {
   product: Product;
   onOpen: (product: Product) => void;
   onAddToCart: (productId: string, size: Size) => void;
+  onSelectBand?: (band: string) => void;
 }
 
-export function ProductCard({ product, onOpen, onAddToCart }: ProductCardProps) {
+export function ProductCard({ product, onOpen, onAddToCart, onSelectBand }: ProductCardProps) {
   const [hoveredSize, setHoveredSize] = useState<Size | null>(null);
+  const [copied, setCopied] = useState(false);
   const sizes = sizesFor(product);
   const soldOut = isSoldOut(product);
   const madeToOrder = product.fulfillment === 'sob-encomenda';
   const stockLeft = totalStock(product);
 
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const res = await shareProduct(product);
+    if (res === 'clipboard') {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
     <article className="group panel relative flex flex-col transition-colors duration-300 hover:border-blood/60">
       {/*
-        Etiquetas. O fundo escuro é obrigatório, não decorativo: com foto real
-        a etiqueta pode cair sobre qualquer cor, e sem ele some no claro.
+        Etiquetas no topo da imagem.
+        Lado Esquerdo: Tag de Promoção e Tag de Destaque (empilhadas verticalmente)
+        Lado Direito: Botão de Compartilhar
       */}
-      <div className="pointer-events-none absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5">
+      <div className="pointer-events-none absolute top-3 left-3 z-10 flex flex-col items-start gap-1.5 max-w-[calc(100%-3.5rem)]">
+        {product.oldPrice && product.oldPrice > product.price && (
+          <span className="tag border-blood bg-blood text-bone shadow-md">
+            -{Math.round((1 - product.price / product.oldPrice) * 100)}%
+          </span>
+        )}
         {product.tag && (
           <span
-            className={`tag bg-void/85 backdrop-blur-sm ${
-              product.tag === 'Última Peça' ? 'text-blood-bright' : 'text-parchment'
+            className={`tag bg-void/90 backdrop-blur-sm border border-smoke/70 ${
+              product.tag === 'Última Peça' ? 'text-blood-bright border-blood/60' : 'text-parchment'
             }`}
           >
             {product.tag}
           </span>
         )}
-        {product.oldPrice && (
-          <span className="tag border-blood bg-blood text-bone">
-            -{Math.round((1 - product.price / product.oldPrice) * 100)}%
-          </span>
-        )}
       </div>
 
+      {/* Botão de Compartilhar no Topo Direito */}
+      <div className="absolute top-3 right-3 z-10">
+        <button
+          type="button"
+          onClick={handleShare}
+          className="flex h-7 w-7 items-center justify-center rounded-sm border border-smoke/80 bg-void/90 text-grave backdrop-blur-sm transition-all hover:border-blood hover:text-bone active:scale-95 shadow-sm"
+          title={copied ? 'Link copiado!' : 'Compartilhar peça'}
+          aria-label={`Compartilhar link de ${product.name}`}
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-emerald-400" />
+          ) : (
+            <Share2 className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
+
+      {/* Tag de Produção no Canto Inferior Esquerdo da Foto */}
       {madeToOrder && (
-        <span className="tag absolute top-3 right-3 z-10 gap-1 bg-void/85 text-parchment backdrop-blur-sm">
-          <Hammer className="h-2.5 w-2.5" />
-          Sob encomenda
-        </span>
+        <div className="pointer-events-none absolute bottom-3 left-3 z-10">
+          <span className="tag gap-1 bg-void/90 text-parchment backdrop-blur-sm border border-smoke/70 text-[0.56rem]">
+            <Hammer className="h-2.5 w-2.5 text-blood-bright" />
+            Sob encomenda
+          </span>
+        </div>
       )}
 
       <button
@@ -70,7 +103,21 @@ export function ProductCard({ product, onOpen, onAddToCart }: ProductCardProps) 
 
       <div className="flex flex-1 flex-col gap-3 border-t border-smoke p-4">
         <div>
-          <p className="heading-carved text-[0.58rem] text-blood-bright">{product.band}</p>
+          {onSelectBand ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectBand(product.band);
+              }}
+              className="heading-carved text-[0.58rem] text-blood-bright transition-colors hover:text-bone hover:underline"
+              title={`Ver todas as peças de ${product.band}`}
+            >
+              {product.band}
+            </button>
+          ) : (
+            <p className="heading-carved text-[0.58rem] text-blood-bright">{product.band}</p>
+          )}
           <button
             onClick={() => onOpen(product)}
             className="mt-1 block text-left font-display text-sm leading-tight font-semibold text-bone hover:text-blood-bright"
@@ -79,8 +126,9 @@ export function ProductCard({ product, onOpen, onAddToCart }: ProductCardProps) 
           </button>
         </div>
 
-        <div className="flex items-center text-[0.68rem] text-grave">
-          <span>{product.category}</span>
+        <div className="flex items-center justify-between font-mono text-[0.65rem] text-grave">
+          <span className="rounded bg-void px-1.5 py-0.5 border border-smoke">{product.category}</span>
+          <span className="text-parchment font-medium">100% Algodão</span>
         </div>
 
         {/* Seletor rápido de tamanho */}

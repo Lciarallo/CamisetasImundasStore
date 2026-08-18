@@ -136,7 +136,7 @@ export function Footer({ onOpenCustomerPortal }: { onOpenCustomerPortal?: () => 
 
       <div className="border-t border-smoke">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-[0.68rem] text-grave md:flex-row md:px-8">
-          <p>© 2026 Camisetas Imundas · CNPJ 68.510.540/0001-50</p>
+          <p>© 2026 Camisetas Imundas · Todos os direitos reservados</p>
           <p className="text-grave">Pagamento disponível: PIX</p>
         </div>
       </div>

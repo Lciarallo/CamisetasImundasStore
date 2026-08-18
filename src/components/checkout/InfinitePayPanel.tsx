@@ -56,7 +56,7 @@ export function InfinitePayPanel({
                 href={checkoutUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn btn-blood inline-flex items-center gap-2 text-xs font-semibold"
+                className="btn btn-blood flex w-full items-center justify-center gap-2 py-3 text-xs font-semibold sm:inline-flex sm:w-auto"
               >
                 <span>Pagar com PIX na InfinitePay</span>
                 <ExternalLink className="h-3.5 w-3.5" />
@@ -80,7 +80,7 @@ export function InfinitePayPanel({
       {checkoutUrl && (
         <div>
           <span className="label">Link de Pagamento</span>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
               readOnly
               value={checkoutUrl}
@@ -91,7 +91,7 @@ export function InfinitePayPanel({
             <button
               onClick={copy}
               type="button"
-              className={`btn shrink-0 ${copied ? 'btn-ghost border-blood text-blood-bright' : 'btn-bone'}`}
+              className={`btn shrink-0 w-full sm:w-auto ${copied ? 'btn-ghost border-blood text-blood-bright' : 'btn-bone'}`}
             >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? 'Copiado' : 'Copiar Link'}
