@@ -16,6 +16,20 @@ import { ConfirmDialog } from './ProductsAdmin';
 
 const ROLES: Role[] = ['mestre', 'necromante', 'acolito', 'servo'];
 
+/**
+ * Privilégios de edição exigem o de visualização correspondente.
+ *
+ * As abas do painel (Catálogo, Estoque, Pedidos, Usuários) são gateadas pelo
+ * privilégio de visualização — sem ele, a aba nem aparece, e o privilégio de
+ * edição fica concedido mas inacessível.
+ */
+const PERMISSION_REQUIRES: Partial<Record<Permission, Permission>> = {
+  'products.edit': 'products.view',
+  'stock.edit': 'products.view',
+  'orders.edit': 'orders.view',
+  'users.edit': 'users.view',
+};
+
 const blankUser = (): AdminUser => ({
   id: `u-${Date.now().toString(36)}`,
   name: '',
@@ -218,11 +232,22 @@ function UserEditor({
 
   const togglePermission = (permission: Permission) => {
     const has = draft.permissions.includes(permission);
-    update({
-      permissions: has
-        ? draft.permissions.filter((p) => p !== permission)
-        : [...draft.permissions, permission],
-    });
+    if (has) {
+      // Desligar uma visão desliga junto quem depende dela — senão sobra um
+      // privilégio de edição sem aba pra usá-lo.
+      const dependents = ALL_PERMISSIONS.filter((p) => PERMISSION_REQUIRES[p] === permission);
+      update({
+        permissions: draft.permissions.filter(
+          (p) => p !== permission && !dependents.includes(p),
+        ),
+      });
+    } else {
+      const required = PERMISSION_REQUIRES[permission];
+      const next = new Set(draft.permissions);
+      next.add(permission);
+      if (required) next.add(required);
+      update({ permissions: [...next] });
+    }
   };
 
   const roleDefaults = ROLE_PERMISSIONS[draft.role] || [];

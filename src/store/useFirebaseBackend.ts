@@ -57,6 +57,7 @@ export function useFirebaseBackend(): StoreValue {
   const [productsReady, setProductsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsBootstrap, setNeedsBootstrap] = useState(false);
+  const [catalogEmpty, setCatalogEmpty] = useState(false);
 
   // O carrinho continua no navegador: é rascunho do visitante, não dado da
   // loja. Guardar no servidor exigiria identificar quem não fez login.
@@ -133,8 +134,13 @@ export function useFirebaseBackend(): StoreValue {
         q,
         (snap) => {
           const list = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Product);
-          if (snap.empty) {
-            setProducts(SEED_PRODUCTS.filter((seed) => (session ? true : seed.active)));
+          setCatalogEmpty(snap.empty);
+          // Vitrine pública sem catálogo ainda: mostra o catálogo de demonstração
+          // em vez de tela vazia. No painel (com sessão) isso esconderia que o
+          // Firestore está mesmo vazio — o admin editaria peças fantasma que não
+          // existem no banco, e o catálogo real sumiria no primeiro salvamento.
+          if (snap.empty && !session) {
+            setProducts(SEED_PRODUCTS.filter((seed) => seed.active));
           } else {
             setProducts(list);
           }
@@ -225,12 +231,13 @@ export function useFirebaseBackend(): StoreValue {
   /* ---------------------------------------------------------------------- */
 
   // Loja recém-criada não tem catálogo nem administrador. Detectamos pela
-  // ausência de peças, que é o único sinal legível sem estar autenticado.
+  // ausência de peças no Firestore — `catalogEmpty` vem direto do snapshot,
+  // não de `products`, que pode estar mostrando o catálogo de demonstração.
   useEffect(() => {
     if (productsReady && authReady) {
-      setNeedsBootstrap(isUsingFirebaseEmulators && products.length === 0 && !session);
+      setNeedsBootstrap(isUsingFirebaseEmulators && catalogEmpty && !session);
     }
-  }, [productsReady, authReady, products.length, session]);
+  }, [productsReady, authReady, catalogEmpty, session]);
 
   /* ---------------------------------------------------------------------- */
   /* Carrinho                                                                */

@@ -14,6 +14,27 @@ const REGION = 'southamerica-east1';
 const ROLES: Role[] = ['mestre', 'necromante', 'acolito', 'servo'];
 
 /**
+ * Traduz erros do Firebase Auth Admin SDK.
+ *
+ * Sem isso, um e-mail duplicado (o erro mais comum aqui) sobe como exceção
+ * crua, o Functions devolve "internal" sem mensagem, e a tela mostra
+ * literalmente "INTERNAL" — sem dizer ao Mestre o que deu errado.
+ */
+function translateAuthError(cause: unknown): HttpsError {
+  const code = (cause as { code?: string } | undefined)?.code;
+  if (code === 'auth/email-already-exists') {
+    return new HttpsError('already-exists', 'Já existe uma conta com este e-mail.');
+  }
+  if (code === 'auth/invalid-email') {
+    return new HttpsError('invalid-argument', 'E-mail inválido.');
+  }
+  if (code === 'auth/invalid-password') {
+    return new HttpsError('invalid-argument', 'Senha inválida — use ao menos 6 caracteres.');
+  }
+  return new HttpsError('internal', 'Não foi possível salvar o usuário no Firebase Auth.');
+}
+
+/**
  * Cria ou atualiza um integrante da equipe.
  *
  * A conta vive no Firebase Auth (senha com hash, gerenciada pelo Google) e o
@@ -96,23 +117,31 @@ export const saveStaff = onCall({ region: REGION }, async (request) => {
       throw new HttpsError('failed-precondition', 'Você não pode desativar a própria conta.');
     }
 
-    await auth.updateUser(targetUid, {
-      email,
-      displayName: name.trim(),
-      disabled: active === false,
-      ...(password && password.length >= 6 ? { password } : {}),
-    });
+    try {
+      await auth.updateUser(targetUid, {
+        email,
+        displayName: name.trim(),
+        disabled: active === false,
+        ...(password && password.length >= 6 ? { password } : {}),
+      });
+    } catch (cause) {
+      throw translateAuthError(cause);
+    }
   } else {
     if (typeof password !== 'string' || password.length < 6) {
       throw new HttpsError('invalid-argument', 'A senha precisa de ao menos 6 caracteres.');
     }
-    const created = await auth.createUser({
-      email,
-      password,
-      displayName: name.trim(),
-      disabled: active === false,
-    });
-    targetUid = created.uid;
+    try {
+      const created = await auth.createUser({
+        email,
+        password,
+        displayName: name.trim(),
+        disabled: active === false,
+      });
+      targetUid = created.uid;
+    } catch (cause) {
+      throw translateAuthError(cause);
+    }
   }
 
   const effective = await applyStaffAccess(

@@ -248,7 +248,10 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
         <ConfirmDialog
           message="Restaurar todos os dados de demonstração? Produtos, pedidos, usuários e carrinho voltam ao estado original."
           onCancel={() => setConfirmReset(false)}
-          onConfirm={resetEverything}
+          onConfirm={async () => {
+            setConfirmReset(false);
+            await resetEverything();
+          }}
         />
       )}
     </div>
