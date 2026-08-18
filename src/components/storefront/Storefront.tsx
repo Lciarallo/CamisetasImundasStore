@@ -37,7 +37,7 @@ export function Storefront({
   onOpenAdmin: () => void;
   onCheckout: () => void;
 }) {
-  const { products, cartTotals, addToCart } = useStore();
+  const { products, loading, cartTotals, addToCart } = useStore();
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<Category | 'Todos'>('Todos');
@@ -324,7 +324,11 @@ export function Storefront({
         )}
 
         {/* Grade */}
-        {visible.length === 0 ? (
+        {loading ? (
+          <div className="py-20 text-center text-grave">
+            <SkullMark className="mx-auto h-12 w-12 animate-pulse text-dust opacity-30" />
+          </div>
+        ) : visible.length === 0 ? (
           <div className="py-20 text-center text-grave">
             <SkullMark className="mx-auto h-12 w-12 text-dust opacity-30" />
             <p className="heading-carved mt-4 text-xs text-bone">Nenhuma peça encontrada</p>

@@ -47,7 +47,13 @@ async function attempt(action: () => Promise<unknown>, success: string): Promise
 }
 
 export function useFirebaseBackend(): StoreValue {
-  const [products, setProducts] = useState<Product[]>(SEED_PRODUCTS);
+  // Vazio até o primeiro snapshot do Firestore chegar — não SEED_PRODUCTS.
+  // "Ainda não sei o que tem no catálogo" é um estado diferente de "sei que
+  // está vazio", e só o segundo deve cair no catálogo de demonstração (linha
+  // abaixo, dentro do onSnapshot). Começar com SEED_PRODUCTS fazia peças
+  // fantasma piscarem na vitrine em toda carga de página, antes do primeiro
+  // dado real chegar.
+  const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>(SEED_COUPONS);
