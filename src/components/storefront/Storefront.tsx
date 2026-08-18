@@ -6,7 +6,6 @@ import { isSoldOut, useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
 import { Header } from './Header';
 import { Hero } from './Hero';
-import { BandsMarquee } from './BandsMarquee';
 import { ProductCard } from './ProductCard';
 import { Footer } from './Footer';
 
@@ -212,13 +211,6 @@ export function Storefront({
       />
 
       <Hero onExplore={scrollToCatalog} />
-
-      {/* Marquee infinito de bandas (Estilo skills.sh) */}
-      <BandsMarquee
-        bands={uniqueBands}
-        selectedBand={selectedBand}
-        onSelectBand={handleBandSelect}
-      />
 
       {/* scroll-mt compensa o header fixo — senão o título some atrás dele. */}
       <main
