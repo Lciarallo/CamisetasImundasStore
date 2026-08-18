@@ -20,6 +20,7 @@ const DEFAULT_BANDS = [
   'Sargeist',
   'Behemoth',
   'The Devil\'s Blood',
+  'Conqueror',
   'Dissection',
   'Rotting Christ',
 ];
