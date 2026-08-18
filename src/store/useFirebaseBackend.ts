@@ -133,11 +133,11 @@ export function useFirebaseBackend(): StoreValue {
         q,
         (snap) => {
           const list = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Product);
-          const seen = new Set(list.map((p) => p.id));
-          const missing = SEED_PRODUCTS.filter(
-            (seed) => !seen.has(seed.id) && (session ? true : seed.active),
-          );
-          setProducts([...list, ...missing]);
+          if (snap.empty) {
+            setProducts(SEED_PRODUCTS.filter((seed) => (session ? true : seed.active)));
+          } else {
+            setProducts(list);
+          }
           setProductsReady(true);
           setError(null);
         },

@@ -160,9 +160,13 @@ export function ProductsAdmin() {
         <ConfirmDialog
           message={`Excluir "${products.find((p) => p.id === confirmDelete)?.name}"? Esta ação não pode ser desfeita.`}
           onCancel={() => setConfirmDelete(null)}
-          onConfirm={() => {
-            deleteProduct(confirmDelete);
+          onConfirm={async () => {
+            const targetId = confirmDelete;
             setConfirmDelete(null);
+            const res = await deleteProduct(targetId);
+            if (res && !res.ok) {
+              alert(res.message || 'Não foi possível excluir a peça.');
+            }
           }}
         />
       )}
