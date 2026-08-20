@@ -83,7 +83,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 
 export const FREE_SHIPPING_THRESHOLD = 299;
 export const SHIPPING_COST = 24.9;
-export const PIX_DISCOUNT = 0.05;
 
 /** Teto por linha, para um pedido forjado não zerar o estoque de uma vez. */
 export const MAX_QUANTITY_PER_LINE = 10;

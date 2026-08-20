@@ -208,7 +208,7 @@ export function renderOrderCreatedEmail(data: EmailTemplateData): { subject: str
 
     <div style="background-color: #1a0809; border: 1px solid #630c12; padding: 18px; text-align: center; margin: 24px 0; border-radius: 2px;">
       <p style="margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #ff5252; font-weight: 700;">
-        Pague via PIX com 5% de desconto à vista
+        Pagamento seguro via PIX
       </p>
       <p style="margin: 0 0 14px 0; font-size: 22px; font-weight: 800; color: #ffffff;">
         ${money(data.total)}
@@ -424,21 +424,8 @@ export function renderOrderDeliveredEmail(data: EmailTemplateData): { subject: s
       Salve, <strong style="color: #ffffff;">${data.customerName}</strong>! Consta no sistema dos Correios que o seu pacote foi entregue com sucesso.
     </p>
 
-    <div style="background-color: #1a0809; border: 1px solid #630c12; padding: 20px; text-align: center; margin: 24px 0; border-radius: 2px;">
-      <p style="margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #ff5252; font-weight: 700;">
-        Presente para sua próxima compra
-      </p>
-      <p style="margin: 0 0 10px 0; font-size: 13px; color: #e2ddd3;">
-        Use o cupom abaixo no checkout e ganhe 10% de desconto:
-      </p>
-      <div style="display: inline-block; padding: 8px 18px; background-color: #000000; border: 1px dashed #ff5252; font-family: monospace; font-size: 16px; font-weight: 800; color: #ffffff; letter-spacing: 0.15em;">
-        CULTO10
-      </div>
-      <div style="margin-top: 16px;">
-        <a href="${store}" class="btn">
-          CONFERIR NOVO ACERVO
-        </a>
-      </div>
+    <div style="margin: 24px 0; text-align: center;">
+      <a href="${store}" class="btn">CONFERIR NOVO ACERVO</a>
     </div>
 
     <p style="font-size: 12px; color: #7a7782; text-align: center; margin-top: 20px;">

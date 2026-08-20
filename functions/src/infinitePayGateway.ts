@@ -163,8 +163,8 @@ export async function createInfinitePayLink(input: InfinitePayLinkInput): Promis
   const body: Record<string, unknown> = {
     handle: h,
     order_nsu: input.orderId,
-    // Uma linha sintética com o total: o valor já passou por cupom, frete e
-    // desconto PIX em `orders.ts`. Mandar item a item faria o somatório da
+    // Uma linha sintética com o total: o valor já passou por cupom e frete em
+    // `orders.ts`. Mandar item a item faria o somatório da
     // InfinitePay divergir do nosso por arredondamento, e aí nada mais bate.
     items: [
       { quantity: 1, price: input.amountCents, description: `Pedido ${input.orderId}` },

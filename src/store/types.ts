@@ -70,6 +70,8 @@ export interface StoreValue {
   clearCart: () => void;
   applyCoupon: (code: string) => Promise<Result>;
   removeCoupon: () => void;
+  saveCoupon: (coupon: Coupon) => Promise<Result>;
+  deleteCoupon: (code: string) => Promise<Result>;
 
   /** Fecha o pedido. No modo Firebase o total vem recalculado do servidor. */
   placeOrder: (draft: OrderDraft) => Promise<Order>;

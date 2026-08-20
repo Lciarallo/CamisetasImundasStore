@@ -36,7 +36,7 @@ import { useStore } from '../../store/StoreContext';
 import { SkullMark } from '../art/Sigils';
 import { BrandLogo } from '../art/BrandLogo';
 import { TeeImage } from '../art/TeeImage';
-import { PIX_DISCOUNT, InfinitePayPanel } from './InfinitePayPanel';
+import { InfinitePayPanel } from './InfinitePayPanel';
 
 type Step = 'identificacao' | 'entrega' | 'pagamento' | 'confirmado';
 
@@ -99,12 +99,6 @@ export function Checkout({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [step]);
-
-  // Estimativa para o resumo. O valor definitivo sempre volta do servidor.
-  const pixTotal =
-    cartTotals.total <= 1.0
-      ? cartTotals.total
-      : cartTotals.total * (1 - PIX_DISCOUNT);
 
   /* ---------------------------------------------------------------------- */
   /* Validação por etapa                                                    */
@@ -721,7 +715,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                   <QrCode className="h-5 w-5 shrink-0 text-blood-bright" />
                   <span className="heading-carved text-[0.62rem]">PIX à vista</span>
                 </span>
-                <span className="text-[0.65rem] text-parchment">5% de desconto já aplicado</span>
+                <span className="text-[0.65rem] text-parchment">Confirmação automática</span>
               </div>
 
               <div className="mt-6">
@@ -767,7 +761,7 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                   ) : (
                     <>
                       <Lock className="h-3.5 w-3.5" />
-                      Criar pedido e gerar PIX · {money(pixTotal)}
+                      Criar pedido e gerar PIX · {money(cartTotals.total)}
                     </>
                   )}
                 </button>
@@ -837,17 +831,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                   {cartTotals.shipping === 0 ? 'Grátis' : money(cartTotals.shipping)}
                 </dd>
               </div>
-              <div className="flex justify-between text-blood-bright">
-                <dt>Desconto PIX</dt>
-                <dd className="tabular-nums">
-                  −{money(cartTotals.total - pixTotal)}
-                </dd>
-              </div>
-
               <div className="flex items-baseline justify-between border-t border-smoke pt-3 text-bone">
                 <dt className="heading-carved text-[0.62rem]">Total</dt>
                 <dd className="font-display text-2xl font-bold tabular-nums">
-                  {money(pixTotal)}
+                  {money(cartTotals.total)}
                 </dd>
               </div>
             </dl>

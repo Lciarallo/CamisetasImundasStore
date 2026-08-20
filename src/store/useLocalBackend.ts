@@ -11,7 +11,7 @@ import type {
   Size,
 } from '../types';
 import { SEED_PRODUCTS } from '../data/products';
-import { PIX_DISCOUNT, SEED_COUPONS, SEED_USERS, generateSeedOrders } from '../data/seed';
+import { SEED_COUPONS, SEED_USERS, generateSeedOrders } from '../data/seed';
 import { usePersistentState, wipeStorage } from '../lib/storage';
 import { createInvoiceForOrder } from '../lib/invoice';
 import { availableFor, computeTotals } from './cart';
@@ -29,7 +29,7 @@ export function useLocalBackend(): StoreValue {
   // Pedidos contêm CPF, telefone e endereço; no modo local ficam só em memória.
   const [orders, setOrders] = useState<Order[]>(() => generateSeedOrders(Date.now()));
   const [users, setUsers] = usePersistentState<AdminUser[]>('users', () => SEED_USERS);
-  const [coupons] = usePersistentState<Coupon[]>('coupons', () => SEED_COUPONS);
+  const [coupons, setCoupons] = usePersistentState<Coupon[]>('coupons', () => SEED_COUPONS);
 
   const [cart, setCart] = usePersistentState<CartItem[]>('cart', []);
   const [couponCode, setCouponCode] = usePersistentState<string | null>('coupon', null);
@@ -137,6 +137,39 @@ export function useLocalBackend(): StoreValue {
 
   const removeCoupon = useCallback(() => setCouponCode(null), [setCouponCode]);
 
+  const saveCoupon = useCallback(
+    async (coupon: Coupon): Promise<Result> => {
+      const code = coupon.code.trim().toUpperCase();
+      if (!/^[A-Z0-9][A-Z0-9_-]{2,23}$/.test(code)) {
+        return { ok: false, message: 'Use de 3 a 24 caracteres: letras, números, hífen ou sublinhado.' };
+      }
+      if (!Number.isFinite(coupon.percent) || coupon.percent <= 0 || coupon.percent > 80) {
+        return { ok: false, message: 'O desconto deve ficar entre 1% e 80%.' };
+      }
+      if (!Number.isFinite(coupon.minSubtotal) || coupon.minSubtotal < 0 || coupon.minSubtotal > 100_000) {
+        return { ok: false, message: 'O pedido mínimo deve ficar entre R$ 0 e R$ 100.000.' };
+      }
+      const clean = { ...coupon, code };
+      setCoupons((previous) => {
+        const exists = previous.some((item) => item.code === code);
+        return exists
+          ? previous.map((item) => (item.code === code ? clean : item))
+          : [...previous, clean];
+      });
+      return { ok: true, message: `Cupom ${code} salvo.` };
+    },
+    [setCoupons],
+  );
+
+  const deleteCoupon = useCallback(
+    async (code: string): Promise<Result> => {
+      setCoupons((previous) => previous.filter((coupon) => coupon.code !== code));
+      if (couponCode === code) setCouponCode(null);
+      return { ok: true, message: `Cupom ${code} excluído.` };
+    },
+    [couponCode, setCouponCode, setCoupons],
+  );
+
   /* ---------------------------------------------------------------------- */
   /* Pedidos                                                                 */
   /* ---------------------------------------------------------------------- */
@@ -172,8 +205,7 @@ export function useLocalBackend(): StoreValue {
         ];
       });
 
-      const pixDiscount = cartTotals.total * PIX_DISCOUNT;
-      const total = cartTotals.total - pixDiscount;
+      const total = cartTotals.total;
       const status: OrderStatus = 'aguardando-pagamento';
 
       const order: Order = {
@@ -185,7 +217,7 @@ export function useLocalBackend(): StoreValue {
         address: draft.address,
         lines,
         subtotal: cartTotals.subtotal,
-        discount: cartTotals.discount + pixDiscount,
+        discount: cartTotals.discount,
         shipping: cartTotals.shipping,
         total,
         payment: {
@@ -430,6 +462,8 @@ export function useLocalBackend(): StoreValue {
     clearCart,
     applyCoupon,
     removeCoupon,
+    saveCoupon,
+    deleteCoupon,
     placeOrder,
     updateOrderStatus,
     setTrackingCode,

@@ -7,6 +7,7 @@ import {
   Package,
   RotateCcw,
   Store,
+  TicketPercent,
   TriangleAlert,
   Users,
   X,
@@ -19,6 +20,7 @@ import { SkullMark } from '../art/Sigils';
 import { BrandLogo } from '../art/BrandLogo';
 import { AdminLogin } from './AdminLogin';
 import { Dashboard } from './Dashboard';
+import { CouponsAdmin } from './CouponsAdmin';
 import { OrdersAdmin } from './OrdersAdmin';
 import { ProductsAdmin, ConfirmDialog } from './ProductsAdmin';
 import { StockAdmin } from './StockAdmin';
@@ -37,6 +39,7 @@ const TABS: Tab[] = [
   { key: 'pedidos', label: 'Pedidos', icon: Package, permission: 'orders.view' },
   { key: 'estoque', label: 'Estoque', icon: Boxes, permission: 'products.view' },
   { key: 'catalogo', label: 'Catálogo', icon: Store, permission: 'products.view' },
+  { key: 'cupons', label: 'Cupons', icon: TicketPercent, permission: 'products.view' },
   { key: 'usuarios', label: 'Usuários', icon: Users, permission: 'users.view' },
 ];
 
@@ -238,6 +241,7 @@ export function AdminPanel({ onExit }: { onExit: () => void }) {
               {tab === 'pedidos' && <OrdersAdmin />}
               {tab === 'estoque' && <StockAdmin />}
               {tab === 'catalogo' && <ProductsAdmin />}
+              {tab === 'cupons' && <CouponsAdmin />}
               {tab === 'usuarios' && <UsersAdmin />}
             </>
           )}

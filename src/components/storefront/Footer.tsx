@@ -25,7 +25,7 @@ export function Footer({ onOpenCustomerPortal }: { onOpenCustomerPortal?: () => 
           {[
             { icon: Package, title: 'Frete grátis', text: 'Acima de R$ 299 para todo o Brasil' },
             { icon: Hammer, title: 'Sob encomenda', text: 'Peça esgotada? Produzimos para você' },
-            { icon: QrCode, title: 'PIX à vista', text: '5% de desconto com código exclusivo' },
+            { icon: QrCode, title: 'PIX', text: 'Confirmação automática e pagamento seguro' },
             { icon: ShieldCheck, title: 'Compra segura', text: 'Dados criptografados e nota fiscal' },
           ].map(({ icon: Icon, title, text }) => (
             <li key={title} className="flex items-start gap-3 bg-pitch px-5 py-6">

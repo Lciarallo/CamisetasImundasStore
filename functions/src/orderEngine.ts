@@ -10,7 +10,6 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import {
   FREE_SHIPPING_THRESHOLD,
   MAX_QUANTITY_PER_LINE,
-  PIX_DISCOUNT,
   SHIPPING_COST,
   round2,
   type CouponDoc,
@@ -126,7 +125,15 @@ export function calculateOrderMetrics(
 
   let discount = 0;
   let activeCouponCode: string | null = null;
-  if (couponDoc && couponDoc.active && subtotal >= couponDoc.minSubtotal) {
+  const couponIsSafe =
+    couponDoc &&
+    couponDoc.active &&
+    Number.isFinite(couponDoc.percent) &&
+    couponDoc.percent > 0 &&
+    couponDoc.percent <= 80 &&
+    Number.isFinite(couponDoc.minSubtotal) &&
+    couponDoc.minSubtotal >= 0;
+  if (couponIsSafe && subtotal >= couponDoc.minSubtotal) {
     discount = round2((subtotal * couponDoc.percent) / 100);
     activeCouponCode = requestedCouponCode ? requestedCouponCode.trim().toUpperCase() : null;
   }
@@ -134,14 +141,12 @@ export function calculateOrderMetrics(
   const afterDiscount = round2(subtotal - discount);
   const isOnlyTestItem = lines.length === 1 && subtotal <= 1.0;
   const shipping = isOnlyTestItem || afterDiscount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
-  const beforePayment = round2(afterDiscount + shipping);
-  const pixDiscount = isOnlyTestItem ? 0 : round2(beforePayment * PIX_DISCOUNT);
-  const total = round2(beforePayment - pixDiscount);
+  const total = round2(afterDiscount + shipping);
 
   return {
     lines,
     subtotal,
-    discount: round2(discount + pixDiscount),
+    discount,
     shipping,
     total,
     couponCode: activeCouponCode,

@@ -45,7 +45,7 @@ Monocromática por conceito: **breu**, **osso** e **sangue**. Nada mais.
 - Cartão com seletor rápido de tamanho, aviso de escassez e prazo de produção.
 - Modal com ficha técnica, tabela de medidas em centímetros e seletor de quantidade.
 - Sacola lateral com barra de progresso do frete grátis e cupons
-  (`CULTO10`, `INSANA20`).
+  criados e ativados pelo painel administrativo.
 
 ## 💳 Checkout
 
@@ -59,7 +59,7 @@ dedicado, e oferecer o botão desabilitado só anunciaria uma promessa vazia.
 
 | Recurso | Detalhe |
 |---|---|
-| **PIX** | Cobrança dinâmica criada no servidor via InfinitePay (0% de taxa, aceita MEI e PJ), com 5% de desconto à vista. |
+| **PIX** | Cobrança dinâmica criada no servidor via InfinitePay, com confirmação automática. |
 | **Entrega** | Busca de endereço por CEP via ViaCEP, com preenchimento manual se a API cair. |
 | **Validação** | CPF com dígitos verificadores, e-mail, telefone e CEP. |
 
@@ -211,7 +211,7 @@ firebase emulators:start --only auth,firestore,functions,storage
 npm run dev
 ```
 
-Com os emuladores no ar, `node scripts/verify-backend.mjs` roda **78
+Com os emuladores no ar, `node scripts/verify-backend.mjs` roda **83
 verificações ponta a ponta** contra eles — pedido forjado, adulteração de preço,
 método de pagamento fora do PIX, idempotência, consulta com token, webhook sem
 assinatura, privilégio por cargo, conta desativada, estoque sob concorrência e

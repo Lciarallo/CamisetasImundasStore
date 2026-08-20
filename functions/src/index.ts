@@ -24,6 +24,7 @@ export {
   expirePendingOrders,
 } from './orders.js';
 export { saveProduct, deleteProduct, setStock } from './catalog.js';
+export { saveCoupon, deleteCoupon } from './coupons.js';
 export { saveStaff, deleteStaff, registerLogin } from './staff.js';
 export { bootstrap, seedCatalog } from './bootstrap.js';
 export { paymentWebhook, syncPayment } from './payments.js';

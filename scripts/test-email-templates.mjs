@@ -72,7 +72,7 @@ console.log('4. Template Pedido Enviado: OK (Assunto: ' + shipped.subject + ')')
 // 5. Pedido Entregue
 const delivered = renderOrderDeliveredEmail(mockOrder);
 assert.ok(delivered.subject.includes('Entregue'), 'Assunto deve indicar entrega');
-assert.ok(delivered.html.includes('CULTO10'), 'HTML deve conter cupom de agradecimento');
+assert.ok(!delivered.html.includes('CULTO10'), 'HTML não deve divulgar cupom fixo');
 console.log('5. Template Pedido Entregue: OK (Assunto: ' + delivered.subject + ')');
 
 // 6. Pedido Cancelado

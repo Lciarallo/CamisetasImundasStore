@@ -122,10 +122,14 @@ export const seedCatalog = onCall({ region: REGION }, async (request) => {
   const { sanitizeForSeed } = await import('./catalogSanitizer.js');
 
   if (replace) {
-    const old = await db.collection('products').get();
+    const [oldProducts, oldCoupons] = await Promise.all([
+      db.collection('products').get(),
+      db.collection('coupons').get(),
+    ]);
     // O lote do Firestore aceita 500 operações; o teto acima já cabe nisso.
     const wipe = db.batch();
-    old.docs.forEach((doc) => wipe.delete(doc.ref));
+    oldProducts.docs.forEach((doc) => wipe.delete(doc.ref));
+    oldCoupons.docs.forEach((doc) => wipe.delete(doc.ref));
     await wipe.commit();
   }
 

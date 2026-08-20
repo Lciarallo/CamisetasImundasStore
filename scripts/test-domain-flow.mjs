@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { computeTotals } from '../src/store/cart.ts';
 import { SEED_PRODUCTS } from '../src/data/products.ts';
-import { PIX_DISCOUNT, FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from '../src/data/seed.ts';
+import { FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from '../src/data/seed.ts';
 import { isValidCPF, isValidCEP, isValidEmail, maskCPF, maskCEP, money } from '../src/lib/format.ts';
 
 console.log('\x1b[1mIniciando testes de lógica de domínio e regras de negócio...\x1b[0m\n');
@@ -51,14 +51,13 @@ if (totalsFreeShipping.subtotal >= FREE_SHIPPING_THRESHOLD) {
 }
 console.log('   \x1b[32m✓\x1b[0m Cálculos de carrinho, frete grátis e cupons aprovados.\n');
 
-// 3. Desconto PIX à Vista (5%)
-console.log('3. Testando cálculo do PIX à vista (5%)');
-const beforePix = totalsWithCoupon.total;
-const pixDiscountAmount = Math.round(beforePix * PIX_DISCOUNT * 100) / 100;
-const finalPixTotal = Math.round((beforePix - pixDiscountAmount) * 100) / 100;
-
-assert.strictEqual(pixDiscountAmount > 0, true, 'Desconto PIX deve ser maior que zero');
-assert.strictEqual(finalPixTotal < beforePix, true, 'Total com PIX deve ser menor que o total original');
-console.log(`   \x1b[32m✓\x1b[0m Desconto PIX calculado com precisão: De ${money(beforePix)} para ${money(finalPixTotal)} (${money(pixDiscountAmount)} de economia).\n`);
+// 3. PIX não altera o valor comercial
+console.log('3. Testando PIX sem desconto automático');
+assert.strictEqual(
+  totalsWithCoupon.total,
+  totalsWithCoupon.subtotal - totalsWithCoupon.discount + totalsWithCoupon.shipping,
+  'PIX deve cobrar exatamente o total após cupom e frete',
+);
+console.log('   \x1b[32m✓\x1b[0m PIX mantém o total calculado pelo carrinho.\n');
 
 console.log('\x1b[32m\x1b[1mTodos os 3 grupos de testes unitários passaram com sucesso!\x1b[0m');

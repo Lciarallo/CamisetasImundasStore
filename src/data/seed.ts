@@ -56,11 +56,8 @@ export const SEED_USERS: AdminUser[] = [
   },
 ];
 
-export const SEED_COUPONS: Coupon[] = [
-  { code: 'CULTO10', percent: 10, minSubtotal: 150, active: true },
-  { code: 'INSANA20', percent: 20, minSubtotal: 400, active: true },
-  { code: 'INVERNO15', percent: 15, minSubtotal: 250, active: false },
-];
+/** A loja começa sem promoção; novos cupons são criados pelo painel. */
+export const SEED_COUPONS: Coupon[] = [];
 
 /* -------------------------------------------------------------------------- */
 /* Geração do histórico de pedidos                                            */
@@ -140,8 +137,6 @@ function statusForAge(random: () => number, daysAgo: number): OrderStatus {
 
 export const FREE_SHIPPING_THRESHOLD = 299;
 export const SHIPPING_COST = 24.9;
-/** Desconto por pagar à vista no PIX — praxe no varejo brasileiro. */
-export const PIX_DISCOUNT = 0.05;
 
 /**
  * Monta 90 dias de histórico. `now` é injetado para o resultado ser
@@ -170,8 +165,8 @@ export function generateSeedOrders(now: number, count = 78): Order[] {
     }
 
     const subtotal = lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
-    const coupon = random() > 0.85 ? 'CULTO10' : undefined;
-    const discount = coupon ? subtotal * 0.1 : 0;
+    const coupon = undefined;
+    const discount = 0;
     const shipping = subtotal - discount >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
     const status = statusForAge(random, daysAgo);
     const [city, state] = pick(random, CITIES);

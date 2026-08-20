@@ -247,6 +247,22 @@ async function main() {
   );
   check('sanitizador mantém os tamanhos fabricados', seeded.data()?.madeToOrderSizes?.length === 2);
 
+  const savedCoupon = await call('saveCoupon')({
+    code: 'futuro15',
+    coupon: { percent: 15, minSubtotal: 200, active: false },
+  });
+  const couponDoc = await getDoc(doc(db, 'coupons', 'FUTURO15'));
+  check('painel normaliza e salva cupom', savedCoupon.data?.code === 'FUTURO15' && couponDoc.exists());
+  check('cupom novo preserva estado inativo', couponDoc.data()?.active === false);
+
+  const unsafeCoupon = await denied(
+    call('saveCoupon')({ code: 'ERRO90', coupon: { percent: 90, minSubtotal: 0, active: true } }),
+  );
+  check('desconto acima de 80% é recusado', unsafeCoupon === 'functions/invalid-argument');
+
+  await call('deleteCoupon')({ code: 'FUTURO15' });
+  check('painel exclui cupom', !(await getDoc(doc(db, 'coupons', 'FUTURO15'))).exists());
+
   const withPhoto = await denied(
     call('saveProduct')({
       id: 'p-foto',
@@ -317,6 +333,11 @@ async function main() {
     `veio ${callWithoutAuth}`,
   );
 
+  const couponWithoutAuth = await denied(
+    call('saveCoupon')({ code: 'INVASOR', coupon: { percent: 50, minSubtotal: 0, active: true } }),
+  );
+  check('criar cupom sem login é negado', couponWithoutAuth === 'functions/unauthenticated');
+
   /* ---------------------------------------------------------------------- */
   section('Fechamento de pedido — o cliente não decide o preço');
 
@@ -337,9 +358,8 @@ async function main() {
   // 149,90 × 2 = 299,80 → passa do teto de frete grátis (299).
   check('subtotal vem do banco, não do cliente', close(order.subtotal, 299.8), `${order.subtotal}`);
   check('frete grátis acima de R$ 299', order.shipping === 0);
-  // O desconto PIX de 5% também é calculado exclusivamente no servidor.
-  check('total forjado é ignorado', close(order.total, 284.81), `${order.total}`);
-  check('desconto forjado é ignorado', close(order.discount, 14.99), `${order.discount}`);
+  check('total forjado é ignorado', close(order.total, 299.8), `${order.total}`);
+  check('desconto forjado é ignorado', close(order.discount, 0), `${order.discount}`);
   check('PIX nasce aguardando confirmação', order.status === 'aguardando-pagamento');
   check('cobrança de pagamento é gerada só depois do pedido', typeof (order.payment?.checkoutUrl ?? order.payment?.pixCode) === 'string');
   check('token opaco volta somente ao checkout', order.customerAccessToken === forgedKey);
@@ -449,10 +469,10 @@ async function main() {
     payment: { method: 'pix' },
     coupon: 'culto10',
   });
-  // 149,90 − 10% = 134,91 + frete 24,90 = 159,81 − 5% PIX = 151,82
+  // 149,90 − 10% = 134,91 + frete 24,90 = 159,81
   check('cupom é aplicado em caixa-alta', pix.data.coupon === 'CULTO10');
   check('frete cobrado abaixo do teto', close(pix.data.shipping, 24.9));
-  check('PIX com 5% e cupom de 10%', close(pix.data.total, 151.82), `${pix.data.total}`);
+  check('PIX não adiciona desconto automático', close(pix.data.total, 159.81), `${pix.data.total}`);
 
   const badCoupon = await call('placeOrder')({
     ...buyer,

@@ -38,16 +38,8 @@ export function Hero({ onExplore }: { onExplore: () => void }) {
           Serigrafia artesanal de alta durabilidade e peças sob encomenda para o culto.
         </p>
 
-        {/* Cupom de Boas-Vindas limpo e funcional */}
-        <div className="mt-8 flex justify-center">
-          <div className="inline-flex items-center gap-2.5 rounded border border-smoke bg-pitch/90 px-3.5 py-1.5 font-mono text-xs text-parchment">
-            <span className="text-grave">Cupom 10% OFF:</span>
-            <span className="font-semibold text-bone selection:bg-blood">CULTO10</span>
-          </div>
-        </div>
-
         <div
-          className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"
+          className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
         >
           <button onClick={onExplore} className="btn btn-bone w-full sm:w-auto">
             Ver o catálogo

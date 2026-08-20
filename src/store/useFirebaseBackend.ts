@@ -56,7 +56,7 @@ export function useFirebaseBackend(): StoreValue {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [coupons, setCoupons] = useState<Coupon[]>(SEED_COUPONS);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
 
   const [session, setSession] = useState<AdminUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -159,8 +159,11 @@ export function useFirebaseBackend(): StoreValue {
         },
       );
 
+      const couponsQuery = session?.permissions.includes('products.view')
+        ? query(collection(db, 'coupons'))
+        : query(collection(db, 'coupons'), where('active', '==', true));
       unsubCoupons = onSnapshot(
-        query(collection(db, 'coupons'), where('active', '==', true)),
+        couponsQuery,
         (snap) => setCoupons(snap.docs.map((doc) => ({ code: doc.id, ...doc.data() }) as Coupon)),
         () => setCoupons([]),
       );
@@ -344,6 +347,20 @@ export function useFirebaseBackend(): StoreValue {
   );
 
   const removeCoupon = useCallback(() => setCouponCode(null), [setCouponCode]);
+
+  const saveCoupon = useCallback(
+    (coupon: Coupon) =>
+      attempt(
+        () => call('saveCoupon', { code: coupon.code, coupon }),
+        `Cupom ${coupon.code} salvo.`,
+      ),
+    [],
+  );
+
+  const deleteCoupon = useCallback(
+    (code: string) => attempt(() => call('deleteCoupon', { code }), `Cupom ${code} excluído.`),
+    [],
+  );
 
   /* ---------------------------------------------------------------------- */
   /* Mutações                                                                */
@@ -560,6 +577,8 @@ export function useFirebaseBackend(): StoreValue {
     clearCart,
     applyCoupon,
     removeCoupon,
+    saveCoupon,
+    deleteCoupon,
     placeOrder,
     updateOrderStatus,
     setTrackingCode,

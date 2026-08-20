@@ -1,9 +1,6 @@
 import { useState } from 'react';
 import { Check, Copy, ExternalLink, ShieldCheck, Zap } from 'lucide-react';
 import { money } from '../../lib/format';
-import { PIX_DISCOUNT } from '../../data/seed';
-
-export { PIX_DISCOUNT };
 
 export function InfinitePayPanel({
   checkoutUrl,
@@ -39,9 +36,7 @@ export function InfinitePayPanel({
             <p className="mt-1 font-display text-2xl font-bold text-bone tabular-nums">
               {money(amount)}
             </p>
-            <p className="text-[0.68rem] text-grave">
-              já com {Math.round(PIX_DISCOUNT * 100)}% de desconto à vista
-            </p>
+            <p className="text-[0.68rem] text-grave">valor total do pedido</p>
           </div>
 
           <ol className="space-y-1 text-[0.7rem] text-parchment">

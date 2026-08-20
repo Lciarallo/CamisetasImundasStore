@@ -197,9 +197,7 @@ export function ProductModal({
                   {money(product.price)}
                 </span>
               </div>
-              <p className="mt-1 text-[0.68rem] text-grave tabular-nums">
-                {money(product.price * 0.95)} no PIX à vista
-              </p>
+              <p className="mt-1 text-[0.68rem] text-grave">Pagamento por PIX</p>
             </div>
 
             {/* Tamanhos */}
