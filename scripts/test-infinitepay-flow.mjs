@@ -1,7 +1,11 @@
 process.env.FUNCTIONS_EMULATOR = 'true';
 import assert from 'node:assert';
-import { createPaymentCharge } from '../functions/src/payments.ts';
-import { checkInfinitePayPayment } from '../functions/src/infinitePayGateway.ts';
+// O build preserva os imports `.js` usados pelas Functions. Importar os fontes
+// `.ts` diretamente pelo Node quebra a resolução desses módulos irmãos.
+// Os imports são dinâmicos para que o sinalizador do emulador exista antes da
+// avaliação dos módulos (imports estáticos seriam executados antes da linha 1).
+const { createPaymentCharge } = await import('../functions/lib/payments.js');
+const { checkInfinitePayPayment } = await import('../functions/lib/infinitePayGateway.js');
 
 console.log('\x1b[1mIniciando testes da integração InfinitePay (Backend / Functions)...\x1b[0m\n');
 
@@ -32,16 +36,16 @@ console.log('2. Testando recusa de requisições inválidas');
 let errorThrown = false;
 try {
   await createPaymentCharge({ ...chargeReq, method: 'cartao' });
-} catch (e) {
+} catch (error) {
   errorThrown = true;
-  assert.strictEqual(e.message.includes('exclusivamente cobranças PIX'), true);
+  assert.strictEqual(error.message.includes('exclusivamente cobranças PIX'), true);
 }
 assert.strictEqual(errorThrown, true, 'Deve recusar método fora do PIX');
 
 errorThrown = false;
 try {
   await createPaymentCharge({ ...chargeReq, amount: -10 });
-} catch (e) {
+} catch {
   errorThrown = true;
 }
 assert.strictEqual(errorThrown, true, 'Deve recusar valor negativo');
@@ -49,7 +53,7 @@ assert.strictEqual(errorThrown, true, 'Deve recusar valor negativo');
 errorThrown = false;
 try {
   await createPaymentCharge({ ...chargeReq, customer: { ...chargeReq.customer, cpf: '123' } });
-} catch (e) {
+} catch {
   errorThrown = true;
 }
 assert.strictEqual(errorThrown, true, 'Deve recusar CPF inválido');

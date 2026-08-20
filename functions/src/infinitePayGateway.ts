@@ -185,12 +185,14 @@ export async function createInfinitePayLink(input: InfinitePayLinkInput): Promis
     const response = await postJson(LINKS_PATH, body);
     return assertCheckoutUrl(extractCheckoutUrl(response));
   } catch (cause) {
-    logger.warn('Falha ao gerar link dinâmico na API da InfinitePay, usando checkout direto do lojista', {
+    logger.error('Falha ao gerar link de pagamento na API da InfinitePay', {
       error: (cause as Error).message,
       handle: h,
       orderId: input.orderId,
     });
-    return `https://checkout.infinitepay.io/${encodeURIComponent(h)}`;
+    // Um checkout genérico não preserva order_nsu nem o total calculado pelo
+    // servidor. Entregá-lo ao cliente permitiria pagamento sem conciliação.
+    throw new Error('Não foi possível gerar uma cobrança vinculada ao pedido.');
   }
 }
 

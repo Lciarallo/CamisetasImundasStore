@@ -221,8 +221,8 @@ export function StockAdmin() {
 
                       {/* Botões de Ação em Lote */}
                       {editable && (
-                        <div className="flex items-center gap-2 pt-1">
-                          <span className="text-[0.6rem] font-semibold uppercase tracking-wider text-dust">
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          <span className="w-full text-[0.6rem] font-semibold uppercase tracking-wider text-dust sm:w-auto">
                             Ações em lote:
                           </span>
                           <button

@@ -24,9 +24,11 @@ import {
 } from './infinitePayGateway.js';
 import { sendOrderStatusEmail, RESEND_SECRETS } from './emailService.js';
 import { generateNFeData } from './nfe.js';
+import { enforceRateLimit } from './security.js';
 
 const REGION = 'southamerica-east1';
 const CHARGE_TTL_SECONDS = 30 * 60;
+const APP_CHECK_ENABLED = process.env.ENABLE_APP_CHECK === 'true';
 
 /** Secrets que as funções de cobrança e de webhook precisam ter ligados. */
 export const PAYMENT_RUNTIME_SECRETS = Array.from(
@@ -124,11 +126,11 @@ export async function createPaymentCharge(input: ChargeRequest): Promise<ChargeR
 /* -------------------------------------------------------------------------- */
 
 class WebhookError extends Error {
-  constructor(
-    readonly httpStatus: number,
-    message: string,
-  ) {
+  readonly httpStatus: number;
+
+  constructor(httpStatus: number, message: string) {
     super(message);
+    this.httpStatus = httpStatus;
   }
 }
 
@@ -303,79 +305,48 @@ function collectCoordinates(body: unknown, query: unknown): PaymentCoordinates[]
 }
 
 export const paymentWebhook = onRequest(
-  { region: REGION, cors: true, secrets: [...PAYMENT_RUNTIME_SECRETS] },
+  { region: REGION, cors: false, secrets: [...PAYMENT_RUNTIME_SECRETS] },
   async (request, response) => {
-    if (request.method !== 'POST' && request.method !== 'GET') {
-      response.set('Allow', 'POST, GET').status(405).send('Method Not Allowed');
+    if (request.method !== 'POST') {
+      response.set('Allow', 'POST').status(405).send('Method Not Allowed');
       return;
     }
 
     logger.info('Notificação de pagamento recebida no Webhook', {
-      body: request.body,
-      query: request.query,
-      headers: request.headers,
+      coordinateCount: collectCoordinates(request.body, request.query).length,
+      contentType: request.get('content-type') ?? null,
     });
 
     try {
       const coordsList = collectCoordinates(request.body, request.query);
       if (coordsList.length === 0) {
-        logger.warn('Webhook sem coordenadas de pedido reconhecidas', {
-          body: request.body,
-          query: request.query,
-        });
+        logger.warn('Webhook sem coordenadas de pedido reconhecidas');
         response.status(200).json({ received: true, note: 'no order coordinates matched' });
         return;
       }
 
       for (const coords of coordsList) {
-        let amountCents: number | null = null;
-        let captureMethod: string | null = 'pix';
-
-        // Tenta checar com a API da InfinitePay se possível
+        // O corpo do webhook é público e não autenticado. Ele informa apenas
+        // quais coordenadas consultar; nunca serve como prova de pagamento.
+        // Se a consulta falhar ou disser "não pago", não promovemos o pedido.
+        let proof: Awaited<ReturnType<typeof checkInfinitePayPayment>>;
         try {
-          const proof = await checkInfinitePayPayment(coords);
-          if (proof.paid && proof.amountCents !== null) {
-            amountCents = proof.amountCents;
-            captureMethod = proof.captureMethod ?? 'pix';
-          }
+          proof = await checkInfinitePayPayment(coords);
         } catch (checkErr) {
-          logger.warn('Consulta /payment_check falhou, verificando corpo direto', {
+          logger.warn('Consulta /payment_check falhou; notificação ignorada', {
             error: (checkErr as Error).message,
-            coords,
+            orderId: coords.orderId,
           });
+          continue;
         }
 
-        // Se a consulta não retornou mas o corpo do webhook declara aprovação ou se for webhook oficial
-        const rawBody = (request.body && typeof request.body === 'object' ? request.body : {}) as Record<string, unknown>;
-        const rawStatus = String(rawBody.status ?? rawBody.event ?? '').toLowerCase();
-        const isDirectSuccess =
-          rawBody.paid === true ||
-          rawStatus.includes('paid') ||
-          rawStatus.includes('success') ||
-          rawStatus.includes('approved');
-
-        if (amountCents === null && isDirectSuccess) {
-          const rawAmount = typeof rawBody.amount === 'number' ? rawBody.amount : null;
-          amountCents = rawAmount;
-        }
-
-        // Se ainda assim o valor for nulo, busca o valor original esperado no próprio pedido do Firestore
-        if (amountCents === null) {
-          const db = getFirestore();
-          const orderSnap = await db.collection('orders').doc(coords.orderId).get();
-          if (orderSnap.exists) {
-            const orderData = orderSnap.data() as Record<string, any>;
-            amountCents = cents(orderData.total);
-          }
-        }
-
-        if (amountCents !== null) {
+        if (proof.paid && proof.amountCents !== null) {
           try {
             await markVerifiedPaymentPaid({
               orderId: coords.orderId,
               providerRef: coords.transactionNsu,
-              transactionAmountCents: amountCents,
-              captureMethod,
+              transactionAmountCents: proof.amountCents,
+              captureMethod: proof.captureMethod,
               by: 'InfinitePay (webhook)',
             });
             logger.info('Pedido marcado como PAGO com sucesso', { orderId: coords.orderId });
@@ -383,7 +354,7 @@ export const paymentWebhook = onRequest(
             if (cause instanceof WebhookError && cause.httpStatus === 409) {
               await recordUnreconciled('infinitepay', coords.transactionNsu, {
                 coords,
-                amountCents,
+                amountCents: proof.amountCents,
                 reason: cause.message,
               });
               continue;
@@ -408,16 +379,32 @@ export const paymentWebhook = onRequest(
 );
 
 export const syncPayment = onCall(
-  { region: REGION, secrets: [...PAYMENT_RUNTIME_SECRETS] },
+  {
+    region: REGION,
+    enforceAppCheck: APP_CHECK_ENABLED,
+    secrets: [...PAYMENT_RUNTIME_SECRETS],
+  },
   async (request) => {
+    await enforceRateLimit(request, 'sync-payment', 12, 60);
     const { orderId, transactionNsu, slug } = (request.data ?? {}) as {
       orderId?: string;
       transactionNsu?: string;
       slug?: string;
     };
 
-    if (!orderId || typeof orderId !== 'string') {
+    if (
+      typeof orderId !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(orderId.trim())
+    ) {
       throw new HttpsError('invalid-argument', 'Identificador do pedido não informado.');
+    }
+
+    if (
+      (transactionNsu !== undefined &&
+        (typeof transactionNsu !== 'string' || transactionNsu.trim().length > 160)) ||
+      (slug !== undefined && (typeof slug !== 'string' || slug.trim().length > 160))
+    ) {
+      throw new HttpsError('invalid-argument', 'Coordenadas de pagamento inválidas.');
     }
 
     const cleanId = orderId.trim().toUpperCase();
@@ -454,4 +441,3 @@ export const syncPayment = onCall(
     return { ok: true, status: order.status, paid: false };
   },
 );
-

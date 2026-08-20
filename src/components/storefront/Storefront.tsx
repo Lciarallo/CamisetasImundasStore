@@ -199,6 +199,12 @@ export function Storefront({
 
   return (
     <div className="flex min-h-screen flex-col">
+      <a
+        href="#catalogo"
+        className="sr-only z-[100] bg-bone px-4 py-3 font-semibold text-void focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+      >
+        Pular para o catálogo
+      </a>
       <Header
         cartCount={cartTotals.itemCount}
         search={search}

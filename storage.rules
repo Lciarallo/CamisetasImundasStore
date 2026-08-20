@@ -27,7 +27,7 @@ service firebase.storage {
       allow read: if true;
 
       allow write: if can('products.edit')
-        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.size <= 2 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp|avif)');
 
       allow delete: if can('products.edit');

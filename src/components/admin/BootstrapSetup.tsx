@@ -55,8 +55,10 @@ export function BootstrapSetup({ onDone }: { onDone: () => void }) {
 
         <div className="mt-6 space-y-4">
           <div>
-            <span className="label">Seu nome</span>
+            <label className="label" htmlFor="bootstrap-name">Seu nome</label>
             <input
+              id="bootstrap-name"
+              name="name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               required
@@ -65,8 +67,10 @@ export function BootstrapSetup({ onDone }: { onDone: () => void }) {
             />
           </div>
           <div>
-            <span className="label">E-mail</span>
+            <label className="label" htmlFor="bootstrap-email">E-mail</label>
             <input
+              id="bootstrap-email"
+              name="email"
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -76,8 +80,10 @@ export function BootstrapSetup({ onDone }: { onDone: () => void }) {
             />
           </div>
           <div>
-            <span className="label">Senha (mínimo 6 caracteres)</span>
+            <label className="label" htmlFor="bootstrap-password">Senha (mínimo 6 caracteres)</label>
             <input
+              id="bootstrap-password"
+              name="password"
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -90,7 +96,7 @@ export function BootstrapSetup({ onDone }: { onDone: () => void }) {
         </div>
 
         {error && (
-          <p className="mt-4 border border-ember/50 bg-ember/10 px-3 py-2 text-[0.7rem] text-ember">
+          <p role="alert" className="mt-4 border border-ember/50 bg-ember/10 px-3 py-2 text-[0.7rem] text-ember">
             {error}
           </p>
         )}

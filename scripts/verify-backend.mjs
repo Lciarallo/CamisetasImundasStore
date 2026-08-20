@@ -825,8 +825,8 @@ async function main() {
     },
   );
   check(
-    'webhook sem coordenadas/assinatura válidas é rejeitado',
-    webhookNoSecret.status === 400 || webhookNoSecret.status === 401 || webhookNoSecret.status === 503,
+    'webhook sem prova válida é recebido sem promover o pedido',
+    webhookNoSecret.status === 200,
     `veio ${webhookNoSecret.status}`,
   );
 

@@ -91,7 +91,64 @@ export function UsersAdmin() {
         ))}
       </section>
 
-      <div className="panel overflow-x-auto">
+      {/* Cartões — telas estreitas, sem rolagem lateral */}
+      <ul className="space-y-2.5 md:hidden">
+        {users.map((user) => {
+          const isMe = user.id === session?.id;
+          return (
+            <li key={user.id} className="panel p-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[0.72rem] text-bone">
+                    {user.name}
+                    {isMe && <span className="ml-1.5 text-[0.6rem] text-blood-bright">você</span>}
+                  </p>
+                  <p className="truncate text-[0.6rem] text-dust">{user.email}</p>
+                </div>
+                <span className="tag shrink-0 border-iron text-parchment">
+                  {ROLE_LABEL[user.role]}
+                </span>
+              </div>
+
+              <div className="mt-2.5 flex items-center justify-between gap-3 text-[0.65rem]">
+                <span className={user.active ? 'text-parchment' : 'text-dust'}>
+                  {user.active ? 'Ativo' : 'Desativado'}
+                </span>
+                <span className="text-grave tabular-nums">
+                  {user.permissions.length}/{ALL_PERMISSIONS.length} privilégios
+                </span>
+                <span className="text-dust">
+                  {user.lastLoginAt ? timeAgo(user.lastLoginAt) : 'nunca'}
+                </span>
+              </div>
+
+              {editable && (
+                <div className="mt-3 flex items-center gap-4 border-t border-smoke pt-2.5">
+                  <button
+                    onClick={() => setEditing(user)}
+                    className="text-[0.65rem] text-grave hover:text-blood-bright"
+                  >
+                    editar
+                  </button>
+                  {user.role !== 'mestre' && !isMe && (
+                    <button
+                      onClick={() => setConfirmDelete(user)}
+                      className="flex items-center gap-1 text-[0.65rem] text-dust hover:text-ember"
+                      aria-label={`Remover ${user.name}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      remover
+                    </button>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Tabela — telas médias e maiores */}
+      <div className="panel hidden overflow-x-auto md:block">
         <table className="w-full min-w-[680px] text-left">
           <thead>
             <tr className="border-b border-smoke">

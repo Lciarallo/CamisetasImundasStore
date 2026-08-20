@@ -99,73 +99,123 @@ export function OrdersAdmin() {
           <p className="text-[0.75rem] text-grave">Nenhum pedido com esses filtros.</p>
         </div>
       ) : (
-        <div className="panel overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left">
-            <thead>
-              <tr className="border-b border-smoke">
-                {['Pedido', 'Cliente', 'Itens', 'Pagamento', 'Status', 'Total', ''].map(
-                  (header) => (
-                    <th
-                      key={header}
-                      className="heading-carved px-4 py-3 text-[0.55rem] text-grave"
-                    >
-                      {header}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-smoke">
-              {visible.map((order) => {
-                const hasMadeToOrder = order.lines.some(
-                  (line) => line.fulfillment === 'sob-encomenda',
-                );
-                return (
-                  <tr key={order.id} className="transition-colors hover:bg-ash/50">
-                    <td className="px-4 py-3">
-                      <p className="font-display text-[0.7rem] font-bold text-bone tabular-nums">
-                        {order.id}
-                      </p>
-                      <p className="text-[0.6rem] text-dust">{timeAgo(order.createdAt)}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-[0.7rem] text-parchment">{order.customer.name}</p>
-                      <p className="text-[0.6rem] text-dust">
-                        {order.address.city}/{order.address.state}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[0.7rem] text-grave tabular-nums">
-                        {order.lines.reduce((sum, line) => sum + line.quantity, 0)}
-                      </span>
-                      {hasMadeToOrder && (
-                        <Hammer
-                          className="ml-1.5 inline h-3 w-3 text-blood-bright"
-                          aria-label="Contém peça sob encomenda"
-                        />
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-[0.65rem] text-grave">PIX</td>
-                    <td className="px-4 py-3">
+        <>
+          {/* Cartões — telas estreitas, sem rolagem lateral */}
+          <ul className="space-y-2.5 md:hidden">
+            {visible.map((order) => {
+              const hasMadeToOrder = order.lines.some(
+                (line) => line.fulfillment === 'sob-encomenda',
+              );
+              return (
+                <li key={order.id}>
+                  <button
+                    onClick={() => setSelected(order)}
+                    className="panel flex w-full flex-col gap-2 p-3.5 text-left transition-colors hover:border-blood/60"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-display text-[0.72rem] font-bold text-bone tabular-nums">
+                          {order.id}
+                        </p>
+                        <p className="mt-0.5 truncate text-[0.68rem] text-parchment">
+                          {order.customer.name}
+                        </p>
+                      </div>
                       <StatusPill status={order.status} />
-                    </td>
-                    <td className="px-4 py-3 font-display text-[0.7rem] font-bold text-bone tabular-nums">
-                      {money(order.total)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setSelected(order)}
-                        className="text-[0.62rem] text-grave hover:text-blood-bright"
+                    </div>
+                    <div className="flex items-end justify-between gap-3">
+                      <p className="text-[0.62rem] text-dust">
+                        {order.address.city}/{order.address.state} ·{' '}
+                        {order.lines.reduce((sum, line) => sum + line.quantity, 0)}{' '}
+                        {order.lines.length === 1 ? 'item' : 'itens'}
+                        {hasMadeToOrder && (
+                          <Hammer
+                            className="ml-1 inline h-3 w-3 text-blood-bright"
+                            aria-label="Contém peça sob encomenda"
+                          />
+                        )}
+                        {' · '}
+                        {timeAgo(order.createdAt)}
+                      </p>
+                      <p className="shrink-0 font-display text-[0.72rem] font-bold text-bone tabular-nums">
+                        {money(order.total)}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Tabela — telas médias e maiores */}
+          <div className="panel hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[720px] text-left">
+              <thead>
+                <tr className="border-b border-smoke">
+                  {['Pedido', 'Cliente', 'Itens', 'Pagamento', 'Status', 'Total', ''].map(
+                    (header) => (
+                      <th
+                        key={header}
+                        className="heading-carved px-4 py-3 text-[0.55rem] text-grave"
                       >
-                        detalhes
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                        {header}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-smoke">
+                {visible.map((order) => {
+                  const hasMadeToOrder = order.lines.some(
+                    (line) => line.fulfillment === 'sob-encomenda',
+                  );
+                  return (
+                    <tr key={order.id} className="transition-colors hover:bg-ash/50">
+                      <td className="px-4 py-3">
+                        <p className="font-display text-[0.7rem] font-bold text-bone tabular-nums">
+                          {order.id}
+                        </p>
+                        <p className="text-[0.6rem] text-dust">{timeAgo(order.createdAt)}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-[0.7rem] text-parchment">{order.customer.name}</p>
+                        <p className="text-[0.6rem] text-dust">
+                          {order.address.city}/{order.address.state}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-[0.7rem] text-grave tabular-nums">
+                          {order.lines.reduce((sum, line) => sum + line.quantity, 0)}
+                        </span>
+                        {hasMadeToOrder && (
+                          <Hammer
+                            className="ml-1.5 inline h-3 w-3 text-blood-bright"
+                            aria-label="Contém peça sob encomenda"
+                          />
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-[0.65rem] text-grave">PIX</td>
+                      <td className="px-4 py-3">
+                        <StatusPill status={order.status} />
+                      </td>
+                      <td className="px-4 py-3 font-display text-[0.7rem] font-bold text-bone tabular-nums">
+                        {money(order.total)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => setSelected(order)}
+                          className="text-[0.62rem] text-grave hover:text-blood-bright"
+                        >
+                          detalhes
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {current && (

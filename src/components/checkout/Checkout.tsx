@@ -388,8 +388,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
             <Section title="Quem está comprando" step="01">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <Label text="Nome completo" error={errors.name} />
+                  <Label htmlFor="checkout-name" text="Nome completo" error={errors.name} />
                   <input
+                    id="checkout-name"
+                    name="name"
                     autoComplete="name"
                     value={customer.name}
                     onChange={(event) =>
@@ -401,8 +403,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <Label text="E-mail" error={errors.email} />
+                  <Label htmlFor="checkout-email" text="E-mail" error={errors.email} />
                   <input
+                    id="checkout-email"
+                    name="email"
                     type="email"
                     autoComplete="email"
                     value={customer.email}
@@ -418,8 +422,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                   </p>
                 </div>
                 <div>
-                  <Label text="CPF" error={errors.cpf} />
+                  <Label htmlFor="checkout-cpf" text="CPF" error={errors.cpf} />
                   <input
+                    id="checkout-cpf"
+                    name="cpf"
                     inputMode="numeric"
                     value={maskCPF(customer.cpf)}
                     onChange={(event) =>
@@ -431,8 +437,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                   />
                 </div>
                 <div>
-                  <Label text="Celular" error={errors.phone} />
+                  <Label htmlFor="checkout-phone" text="Celular" error={errors.phone} />
                   <input
+                    id="checkout-phone"
+                    name="tel"
+                    type="tel"
                     inputMode="tel"
                     autoComplete="tel"
                     value={maskPhone(customer.phone)}
@@ -459,9 +468,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                 e cada campo a mais é uma chance a mais de errar o endereço.
               */}
               <div className="max-w-[13rem]">
-                <Label text="CEP" error={errors.cep} />
+                <Label htmlFor="checkout-cep" text="CEP" error={errors.cep} />
                 <div className="relative">
                   <input
+                    id="checkout-cep"
+                    name="postal-code"
                     autoFocus
                     inputMode="numeric"
                     autoComplete="postal-code"
@@ -563,8 +574,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                     </p>
                   )}
                   <div className="sm:col-span-6">
-                    <Label text="Rua" error={errors.street} />
+                    <Label htmlFor="checkout-street" text="Rua" error={errors.street} />
                     <input
+                      id="checkout-street"
+                      name="address-line1"
                       ref={streetInputRef}
                       autoComplete="address-line1"
                       value={address.street}
@@ -574,8 +587,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                     />
                   </div>
                   <div className="sm:col-span-3">
-                    <Label text="Bairro" error={errors.district} />
+                    <Label htmlFor="checkout-district" text="Bairro" error={errors.district} />
                     <input
+                      id="checkout-district"
+                      name="address-level3"
+                      autoComplete="address-level3"
                       value={address.district}
                       onChange={(event) =>
                         setAddress({ ...address, district: event.target.value })
@@ -585,8 +601,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <Label text="Cidade" error={errors.city} />
+                    <Label htmlFor="checkout-city" text="Cidade" error={errors.city} />
                     <input
+                      id="checkout-city"
+                      name="address-level2"
+                      autoComplete="address-level2"
                       value={address.city}
                       onChange={(event) => setAddress({ ...address, city: event.target.value })}
                       aria-invalid={Boolean(errors.city)}
@@ -594,8 +613,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                     />
                   </div>
                   <div className="sm:col-span-1">
-                    <Label text="UF" error={errors.state} />
+                    <Label htmlFor="checkout-state" text="UF" error={errors.state} />
                     <input
+                      id="checkout-state"
+                      name="address-level1"
+                      autoComplete="address-level1"
                       maxLength={2}
                       value={address.state}
                       onChange={(event) =>
@@ -612,8 +634,10 @@ export function Checkout({ onBack }: { onBack: () => void }) {
               {cepState !== 'vazio' && cepState !== 'buscando' && (
                 <div className="mt-4 grid gap-4 sm:grid-cols-6">
                   <div className="sm:col-span-2">
-                    <Label text="Número" error={errors.number} />
+                    <Label htmlFor="checkout-number" text="Número" error={errors.number} />
                     <input
+                      id="checkout-number"
+                      name="address-number"
                       ref={numberInputRef}
                       inputMode="numeric"
                       autoComplete="address-line2"
@@ -636,8 +660,11 @@ export function Checkout({ onBack }: { onBack: () => void }) {
                     </label>
                   </div>
                   <div className="sm:col-span-4">
-                    <Label text="Complemento (opcional)" />
+                    <Label htmlFor="checkout-complement" text="Complemento (opcional)" />
                     <input
+                      id="checkout-complement"
+                      name="address-complement"
+                      autoComplete="address-line2"
                       value={address.complement}
                       onChange={(event) =>
                         setAddress({ ...address, complement: event.target.value })
@@ -865,12 +892,20 @@ function Section({
   );
 }
 
-function Label({ text, error }: { text: string; error?: string }) {
+function Label({
+  htmlFor,
+  text,
+  error,
+}: {
+  htmlFor: string;
+  text: string;
+  error?: string;
+}) {
   return (
-    <span className="label flex items-baseline justify-between gap-2">
+    <label htmlFor={htmlFor} className="label flex items-baseline justify-between gap-2">
       {text}
       {error && <span className="text-[0.6rem] normal-case text-ember">{error}</span>}
-    </span>
+    </label>
   );
 }
 

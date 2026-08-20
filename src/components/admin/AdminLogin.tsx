@@ -51,8 +51,10 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
 
           <div className="mt-7 space-y-4">
             <div>
-              <span className="label">E-mail</span>
+              <label className="label" htmlFor="admin-email">E-mail</label>
               <input
+                id="admin-email"
+                name="email"
                 type="email"
                 autoComplete="username"
                 value={email}
@@ -63,8 +65,10 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
               />
             </div>
             <div>
-              <span className="label">Senha</span>
+              <label className="label" htmlFor="admin-password">Senha</label>
               <input
+                id="admin-password"
+                name="password"
                 type="password"
                 autoComplete="current-password"
                 value={password}
@@ -77,7 +81,7 @@ export function AdminLogin({ onBack }: { onBack: () => void }) {
           </div>
 
           {error && (
-            <p className="mt-4 border border-ember/50 bg-ember/10 px-3 py-2 text-[0.7rem] text-ember">
+            <p role="alert" className="mt-4 border border-ember/50 bg-ember/10 px-3 py-2 text-[0.7rem] text-ember">
               {error}
             </p>
           )}

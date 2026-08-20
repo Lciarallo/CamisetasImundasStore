@@ -183,8 +183,8 @@ export function PhotoUploader({
                 </span>
               )}
 
-              {/* Controles: aparecem no hover, mas o foco por teclado também os traz */}
-              <div className="absolute inset-x-0 bottom-0 flex justify-center gap-0.5 bg-void/85 p-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+              {/* Em telas de toque não existe :hover, então os controles ficam sempre visíveis até md; do md pra cima, aparecem só no hover/foco */}
+              <div className="absolute inset-x-0 bottom-0 flex justify-center gap-0.5 bg-void/85 p-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
                 <button
                   type="button"
                   onClick={() => move(index, index - 1)}
